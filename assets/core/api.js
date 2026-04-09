@@ -1,10 +1,30 @@
 const storageKey = "sars_session_v1";
-const apiBaseUrlKey = "sars_api_base_url";
 
 export const config = {
-  baseUrl: localStorage.getItem(apiBaseUrlKey) || "https://attendance.test",
+  baseUrl: "https://attendance.test",
 };
 let pendingRequests = 0;
+
+const DEFAULT_TIMEOUT_MS = 45000;
+const DOWNLOAD_TIMEOUT_MS = 120000;
+
+async function fetchWithTimeout(resource, options = {}, timeoutMs = DEFAULT_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const outer = options.signal;
+  const onOuterAbort = () => controller.abort();
+  if (outer) {
+    if (outer.aborted) controller.abort();
+    else outer.addEventListener("abort", onOuterAbort, { once: true });
+  }
+  const t = setTimeout(() => controller.abort(), timeoutMs);
+  const { signal: _ignored, ...rest } = options;
+  try {
+    return await fetch(resource, { ...rest, signal: controller.signal });
+  } finally {
+    clearTimeout(t);
+    if (outer) outer.removeEventListener("abort", onOuterAbort);
+  }
+}
 
 function notifyLoadingChange() {
   window.dispatchEvent(new CustomEvent("sars:loading", { detail: { pending: pendingRequests } }));
@@ -43,19 +63,19 @@ export function clearSession() {
   localStorage.removeItem(storageKey);
 }
 
-export function setApiBaseUrl(url) {
-  const next = String(url || "").trim().replace(/\/+$/, "");
-  if (!next) return;
-  localStorage.setItem(apiBaseUrlKey, next);
-  config.baseUrl = next;
-}
-
 export async function api(path, options = {}) {
   const session = getSession();
   const isFormData = typeof FormData !== "undefined" && options.body instanceof FormData;
   const headers = {
+    Accept: "application/json",
+    "X-Requested-With": "XMLHttpRequest",
     ...(options.headers || {}),
   };
+  if (isFormData) {
+    // Let the browser set multipart boundary for Laravel file uploads.
+    delete headers["Content-Type"];
+    delete headers["content-type"];
+  }
   if (!isFormData && !headers["Content-Type"]) {
     headers["Content-Type"] = "application/json";
   }
@@ -64,16 +84,28 @@ export async function api(path, options = {}) {
     headers.Authorization = `Bearer ${session.token}`;
   }
 
+  const timeoutMs = typeof options.timeoutMs === "number" ? options.timeoutMs : DEFAULT_TIMEOUT_MS;
+  const { timeoutMs: _omit, ...fetchOptions } = options;
+
   pendingRequests += 1;
   notifyLoadingChange();
   try {
     let response;
     try {
-      response = await fetch(`${config.baseUrl}${path}`, {
-        ...options,
-        headers,
-      });
-    } catch {
+      response = await fetchWithTimeout(
+        `${config.baseUrl}${path}`,
+        {
+          ...fetchOptions,
+          headers,
+        },
+        timeoutMs
+      );
+    } catch (err) {
+      if (err?.name === "AbortError") {
+        throw new Error(
+          `Request timed out (${timeoutMs / 1000}s). Confirm the API is running at ${config.baseUrl}.`
+        );
+      }
       throw new Error(`Cannot connect to API at ${config.baseUrl}. Start backend server and check API URL.`);
     }
 
@@ -100,18 +132,22 @@ export async function api(path, options = {}) {
   }
 }
 
-export async function download(path, filename) {
+export async function download(path, filename, options = {}) {
   const session = getSession();
   const headers = {};
   if (session?.token) headers.Authorization = `Bearer ${session.token}`;
+  const timeoutMs = typeof options.timeoutMs === "number" ? options.timeoutMs : DOWNLOAD_TIMEOUT_MS;
 
   pendingRequests += 1;
   notifyLoadingChange();
   try {
     let response;
     try {
-      response = await fetch(`${config.baseUrl}${path}`, { headers });
-    } catch {
+      response = await fetchWithTimeout(`${config.baseUrl}${path}`, { headers, signal: options.signal }, timeoutMs);
+    } catch (err) {
+      if (err?.name === "AbortError") {
+        throw new Error(`Download timed out (${timeoutMs / 1000}s). Try again or check the API.`);
+      }
       throw new Error(`Cannot connect to API at ${config.baseUrl}.`);
     }
     if (!response.ok) {

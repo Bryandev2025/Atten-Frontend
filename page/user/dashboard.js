@@ -11,6 +11,31 @@ function listFrom(resp) {
   return [];
 }
 
+function featureTabsHtml({ idPrefix, tabs }) {
+  const nav = tabs
+    .map(
+      (tab, index) => `
+      <button type="button" class="feature-tab-btn ${index === 0 ? "active" : ""}" data-feature-tab="${idPrefix}:${tab.id}" aria-selected="${index === 0 ? "true" : "false"}" role="tab">${tab.label}</button>
+    `,
+    )
+    .join("");
+  const panels = tabs
+    .map(
+      (tab, index) => `
+      <section class="feature-tab-panel ${index === 0 ? "active" : ""}" data-feature-panel="${idPrefix}:${tab.id}" role="tabpanel">
+        ${tab.content}
+      </section>
+    `,
+    )
+    .join("");
+  return `
+    <div class="feature-tabs" data-feature-tabs="${idPrefix}">
+      <nav class="feature-tab-nav" role="tablist">${nav}</nav>
+      <div class="feature-tab-content">${panels}</div>
+    </div>
+  `;
+}
+
 function formatDate(value) {
   if (!value) return "-";
   const date = new Date(value);
@@ -113,13 +138,7 @@ export async function studentOverviewHtml() {
   const absentCount = attendanceRecords.filter((item) => String(item.status || "").toLowerCase() === "absent").length;
   const streakDays = calculateAttendanceStreak(attendanceRecords);
 
-  return `
-    <div class="grid stats">
-      <article class="card stat-card"><p class="muted stat-label">Attendance Rate</p><div class="metric">${rateSafe}%</div></article>
-      <article class="card stat-card"><p class="muted stat-label">Present Records</p><div class="metric">${presentCount}</div></article>
-      <article class="card stat-card"><p class="muted stat-label">Pending Reports</p><div class="metric">${pendingReports}</div></article>
-      <article class="card stat-card"><p class="muted stat-label">Unread Announcements</p><div class="metric">${unreadAnnouncements}</div></article>
-    </div>
+  const overviewContent = `
     <div class="grid two">
       ${sectionCard({
         title: "Student Command Center",
@@ -194,13 +213,15 @@ export async function studentOverviewHtml() {
         </div>
       `,
     })}
-    <section class="student-hub">
-      <div class="student-hub-top">
-        <article class="card student-checkin-card">
-          <div class="student-card-head">
-            <h3>Check In</h3>
-            <p class="muted">Scan QR or upload payload file</p>
-          </div>
+  `;
+
+  const hubContent = `
+    <div class="student-hub-top">
+      <article class="card student-checkin-card">
+        <div class="card-head">
+          <h3>Check In</h3>
+          <p class="muted">Scan QR or upload payload file</p>
+        </div>
         <form id="checkin-form" class="grid">
           <textarea class="textarea" name="qr_payload" placeholder="Paste QR payload here..."></textarea>
           <label class="muted">or upload payload file (.txt/.json)</label>
@@ -209,45 +230,48 @@ export async function studentOverviewHtml() {
           <button class="btn btn-primary" type="submit">Check In Now</button>
         </form>
         <div id="checkin-activity" class="grid" style="margin-top:12px;"></div>
-        </article>
-        <article class="card student-profile-card">
-          <h3>School portal card</h3>
-          <p class="muted" style="margin:0 0 10px;">Programme, ID, and check-in QR (for attendance sessions use your teacher’s class QR).</p>
-          <div class="student-profile-meta">
-            <span class="muted">Name</span>
-            <strong>${userName}</strong>
-          </div>
-          <div class="student-profile-meta">
-            <span class="muted">Student ID</span>
-            <strong>${studentId}</strong>
-          </div>
-          ${programLabel ? `<div class="student-profile-meta"><span class="muted">Program</span><strong>${programLabel}</strong></div>` : ""}
-          ${yearLevelLabel ? `<div class="student-profile-meta"><span class="muted">Year level</span><strong>Year ${yearLevelLabel}</strong></div>` : ""}
-          ${classLabel ? `<div class="student-profile-meta"><span class="muted">Class</span><strong>${classLabel}</strong></div>` : ""}
-          ${
-            qrImgSrc
-              ? `<div style="margin-top:10px;text-align:center;"><img src="${qrImgSrc}" width="180" height="180" alt="Student ID QR" style="border-radius:8px;border:1px solid var(--border);" /><p class="muted" style="font-size:11px;margin-top:6px;">Campus ID QR — do not share publicly</p></div>`
-              : ""
-          }
-          ${curriculumRows.length ? `<p class="muted" style="margin-top:10px;font-size:12px;"><strong>This year’s subjects (${curriculumRows.length}):</strong> ${curriculumRows.map((r) => r.subject?.name || r.subject_id).slice(0, 6).join(", ")}${curriculumRows.length > 6 ? "…" : ""}</p>` : ""}
-          <div class="student-profile-meta">
-            <span class="muted">Attendance rate</span>
-            <strong>${rateSafe}%</strong>
-          </div>
-          <div class="student-progress">
-            <span style="width:${rateSafe}%;"></span>
-          </div>
-          <div class="actions" style="justify-content:space-between;">
-            <span class="badge ${pendingReports > 0 ? "warn" : "ok"}">${pendingReports} pending reports</span>
-            <span class="badge">${rows.length} announcements</span>
-          </div>
-        </article>
-      </div>
-      <div class="student-hub-bottom">
-        ${sectionCard({
-          title: "Announcements",
-          subtitle: warning ? `API Notice: ${warning}` : "",
-          body: `
+      </article>
+      <article class="card student-profile-card">
+        <h3>School portal card</h3>
+        <p class="muted" style="margin:0 0 10px;">Programme, ID, and check-in QR (for attendance sessions use your teacher’s class QR).</p>
+        <div class="student-profile-meta">
+          <span class="muted">Name</span>
+          <strong>${userName}</strong>
+        </div>
+        <div class="student-profile-meta">
+          <span class="muted">Student ID</span>
+          <strong>${studentId}</strong>
+        </div>
+        ${programLabel ? `<div class="student-profile-meta"><span class="muted">Program</span><strong>${programLabel}</strong></div>` : ""}
+        ${yearLevelLabel ? `<div class="student-profile-meta"><span class="muted">Year level</span><strong>Year ${yearLevelLabel}</strong></div>` : ""}
+        ${classLabel ? `<div class="student-profile-meta"><span class="muted">Class</span><strong>${classLabel}</strong></div>` : ""}
+        ${
+          qrImgSrc
+            ? `<div style="margin-top:10px;text-align:center;"><img src="${qrImgSrc}" width="180" height="180" alt="Student ID QR" style="border-radius:8px;border:1px solid var(--border);" /><p class="muted" style="font-size:11px;margin-top:6px;">Campus ID QR — do not share publicly</p></div>`
+            : ""
+        }
+        ${curriculumRows.length ? `<p class="muted" style="margin-top:10px;font-size:12px;"><strong>This year’s subjects (${curriculumRows.length}):</strong> ${curriculumRows.map((r) => r.subject?.name || r.subject_id).slice(0, 6).join(", ")}${curriculumRows.length > 6 ? "…" : ""}</p>` : ""}
+        <div class="student-profile-meta">
+          <span class="muted">Attendance rate</span>
+          <strong>${rateSafe}%</strong>
+        </div>
+        <div class="student-progress">
+          <span style="width:${rateSafe}%;"></span>
+        </div>
+        <div class="actions" style="justify-content:space-between;">
+          <span class="badge ${pendingReports > 0 ? "warn" : "ok"}">${pendingReports} pending reports</span>
+          <span class="badge">${rows.length} announcements</span>
+        </div>
+      </article>
+    </div>
+  `;
+
+  const commsContent = `
+    <div class="student-hub-bottom">
+      ${sectionCard({
+        title: "Announcements",
+        subtitle: warning ? `API Notice: ${warning}` : "",
+        body: `
         <div class="table-wrap">
           <table>
             <thead><tr><th>Title</th><th>Body</th><th>Status</th></tr></thead>
@@ -263,10 +287,10 @@ export async function studentOverviewHtml() {
           </table>
         </div>
         `,
-        })}
-        ${sectionCard({
-          title: "Absence Reports",
-          body: `
+      })}
+      ${sectionCard({
+        title: "Absence Reports",
+        body: `
           ${flashPanel?.message ? `<p class="badge ok" style="margin-bottom:8px;">${flashPanel.message}</p>` : ""}
           <form id="student-create-report-form" class="grid">
         <div class="row">
@@ -301,13 +325,45 @@ export async function studentOverviewHtml() {
         </table>
       </div>
         `,
-        })}
-      </div>
-    </section>
+      })}
+    </div>
+  `;
+
+  return `
+    <div class="grid stats">
+      <article class="card stat-card"><p class="muted stat-label">Attendance Rate</p><div class="metric">${rateSafe}%</div></article>
+      <article class="card stat-card"><p class="muted stat-label">Present Records</p><div class="metric">${presentCount}</div></article>
+      <article class="card stat-card"><p class="muted stat-label">Pending Reports</p><div class="metric">${pendingReports}</div></article>
+      <article class="card stat-card"><p class="muted stat-label">Unread Announcements</p><div class="metric">${unreadAnnouncements}</div></article>
+    </div>
+    ${featureTabsHtml({
+      idPrefix: "student-overview",
+      tabs: [
+        { id: "overview", label: "Overview", content: overviewContent },
+        { id: "hub", label: "Hub", content: hubContent },
+        { id: "comms", label: "Announcements & Reports", content: commsContent },
+      ],
+    })}
   `;
 }
 
 export function bindStudentActions({ toast }) {
+  document.querySelectorAll("[data-feature-tabs='student-overview']").forEach((root) => {
+    const buttons = Array.from(root.querySelectorAll("[data-feature-tab]"));
+    const panels = Array.from(root.querySelectorAll("[data-feature-panel]"));
+    const activate = (key) => {
+      buttons.forEach((btn) => {
+        const on = btn.getAttribute("data-feature-tab") === key;
+        btn.classList.toggle("active", on);
+        btn.setAttribute("aria-selected", on ? "true" : "false");
+      });
+      panels.forEach((panel) => {
+        panel.classList.toggle("active", panel.getAttribute("data-feature-panel") === key);
+      });
+    };
+    buttons.forEach((btn) => btn.addEventListener("click", () => activate(btn.getAttribute("data-feature-tab"))));
+  });
+
   document.getElementById("student-go-schedule-btn")?.addEventListener("click", () => {
     rerenderView("schedule");
     toast?.("Switched to the Schedule tab.");
@@ -683,9 +739,9 @@ export async function studentProfileHtml() {
   const flash = consumeUiFlash("student");
   const flashProfile = flash?.view === "profile" ? flash : null;
 
-  return `
+  const readContent = `
     ${sectionCard({
-      title: "Announcement Interactions",
+      title: "Mark as Read",
       body: `
       ${flashProfile?.message ? `<p class="badge ok" style="margin-bottom:8px;">${flashProfile.message}</p>` : ""}
       <form id="student-mark-read-form" class="row">
@@ -695,6 +751,14 @@ export async function studentProfileHtml() {
         </select>
         <button class="btn btn-primary" type="submit" ${announcements.length ? "" : "disabled"}>Mark as Read</button>
       </form>
+    `,
+    })}
+  `;
+
+  const commentsContent = `
+    ${sectionCard({
+      title: "Comment Actions",
+      body: `
       <form id="student-comment-form" class="grid" style="margin-top:12px;">
         <div class="row">
           <select class="input" name="announcement_id" required ${announcements.length ? "" : "disabled"}>
@@ -723,6 +787,14 @@ export async function studentProfileHtml() {
         </select>
         <button class="btn btn-danger" type="submit" ${myComments.length ? "" : "disabled"}>Delete Comment</button>
       </form>
+    `,
+    })}
+  `;
+
+  const logsContent = `
+    ${sectionCard({
+      title: "Interaction Logs",
+      body: `
       <div class="table-wrap" style="margin-top:12px;">
         <table>
           <thead><tr><th>Announcement</th><th>Title</th></tr></thead>
@@ -738,9 +810,36 @@ export async function studentProfileHtml() {
     `,
     })}
   `;
+
+  return `
+    ${featureTabsHtml({
+      idPrefix: "student-profile",
+      tabs: [
+        { id: "read", label: "Mark as Read", content: readContent },
+        { id: "comments", label: "Comments", content: commentsContent },
+        { id: "logs", label: "Activity Logs", content: logsContent },
+      ],
+    })}
+  `;
 }
 
 export function bindStudentProfileActions({ toast } = {}) {
+  document.querySelectorAll("[data-feature-tabs='student-profile']").forEach((root) => {
+    const buttons = Array.from(root.querySelectorAll("[data-feature-tab]"));
+    const panels = Array.from(root.querySelectorAll("[data-feature-panel]"));
+    const activate = (key) => {
+      buttons.forEach((btn) => {
+        const on = btn.getAttribute("data-feature-tab") === key;
+        btn.classList.toggle("active", on);
+        btn.setAttribute("aria-selected", on ? "true" : "false");
+      });
+      panels.forEach((panel) => {
+        panel.classList.toggle("active", panel.getAttribute("data-feature-panel") === key);
+      });
+    };
+    buttons.forEach((btn) => btn.addEventListener("click", () => activate(btn.getAttribute("data-feature-tab"))));
+  });
+
   document.getElementById("student-mark-read-form")?.addEventListener("submit", async (e) => {
     e.preventDefault();
     const data = Object.fromEntries(new FormData(e.currentTarget).entries());

@@ -11,6 +11,31 @@ function listFrom(resp) {
   return [];
 }
 
+function featureTabsHtml({ idPrefix, tabs }) {
+  const nav = tabs
+    .map(
+      (tab, index) => `
+      <button type="button" class="feature-tab-btn ${index === 0 ? "active" : ""}" data-feature-tab="${idPrefix}:${tab.id}" aria-selected="${index === 0 ? "true" : "false"}" role="tab">${tab.label}</button>
+    `,
+    )
+    .join("");
+  const panels = tabs
+    .map(
+      (tab, index) => `
+      <section class="feature-tab-panel ${index === 0 ? "active" : ""}" data-feature-panel="${idPrefix}:${tab.id}" role="tabpanel">
+        ${tab.content}
+      </section>
+    `,
+    )
+    .join("");
+  return `
+    <div class="feature-tabs" data-feature-tabs="${idPrefix}">
+      <nav class="feature-tab-nav" role="tablist">${nav}</nav>
+      <div class="feature-tab-content">${panels}</div>
+    </div>
+  `;
+}
+
 function calendarMonthDayRange(now = new Date()) {
   const yyyy = now.getFullYear();
   const mm = String(now.getMonth() + 1).padStart(2, "0");
@@ -48,23 +73,26 @@ export async function teacherOverviewHtml() {
   let comments = [];
   let absenceReports = [];
   let teaching = { subject_assignments: [], timetable_slots: [] };
-  let warning = "";
-  try {
-    const [classesResp, annsResp, commentsResp, reportsResp, teachRes] = await Promise.all([
-      api("/api/teacher/classes"),
-      api("/api/teacher/announcements"),
-      api("/api/teacher/announcement-comments"),
-      api("/api/teacher/absence-reports"),
-      api("/api/teacher/my-teaching").catch(() => ({ data: teaching })),
-    ]);
-    classes = listFrom(classesResp);
-    announcements = listFrom(annsResp);
-    comments = listFrom(commentsResp);
-    absenceReports = listFrom(reportsResp);
-    teaching = teachRes?.data || teaching;
-  } catch (err) {
-    warning = err.message || "Some teacher dashboard data is unavailable.";
-  }
+  const warnings = [];
+  const settled = await Promise.allSettled([
+    api("/api/teacher/classes"),
+    api("/api/teacher/announcements"),
+    api("/api/teacher/announcement-comments"),
+    api("/api/teacher/absence-reports"),
+    api("/api/teacher/my-teaching"),
+  ]);
+  const [cRes, aRes, coRes, rRes, tRes] = settled;
+  if (cRes.status === "fulfilled") classes = listFrom(cRes.value);
+  else warnings.push(`classes: ${cRes.reason?.message || "failed"}`);
+  if (aRes.status === "fulfilled") announcements = listFrom(aRes.value);
+  else warnings.push(`announcements: ${aRes.reason?.message || "failed"}`);
+  if (coRes.status === "fulfilled") comments = listFrom(coRes.value);
+  else warnings.push(`comments: ${coRes.reason?.message || "failed"}`);
+  if (rRes.status === "fulfilled") absenceReports = listFrom(rRes.value);
+  else warnings.push(`absence reports: ${rRes.reason?.message || "failed"}`);
+  if (tRes.status === "fulfilled") teaching = tRes.value?.data || teaching;
+  else warnings.push(`teaching schedule: ${tRes.reason?.message || "failed"}`);
+  const warning = warnings.length ? warnings.join(" · ") : "";
 
   const drafts = announcements.filter((item) => String(item.status || "").toLowerCase() !== "published").length;
   const pendingReports = absenceReports.filter((item) => String(item.status || "").toLowerCase() === "pending").length;
@@ -123,14 +151,7 @@ export async function teacherOverviewHtml() {
     )
     .join("");
 
-  return `
-    ${warning ? `<article class="card"><p class="muted">API Notice: ${warning}</p></article>` : ""}
-    <div class="grid stats">
-      <article class="card stat-card"><p class="muted stat-label">My Classes</p><div class="metric">${classes.length}</div></article>
-      <article class="card stat-card"><p class="muted stat-label">Draft Announcements</p><div class="metric">${drafts}</div></article>
-      <article class="card stat-card"><p class="muted stat-label">Pending Absence Reviews</p><div class="metric">${pendingReports}</div></article>
-      <article class="card stat-card"><p class="muted stat-label">Comments Needing Review</p><div class="metric">${comments.length}</div></article>
-    </div>
+  const workspaceContent = `
     <div class="grid two">
       ${sectionCard({
         title: "Teacher Command Center",
@@ -190,6 +211,9 @@ export async function teacherOverviewHtml() {
         `,
       })}
     </div>
+  `;
+
+  const insightsContent = `
     ${sectionCard({
       title: "Per-Class Breakdown",
       subtitle: "Quick summary of class communication workload.",
@@ -223,6 +247,9 @@ export async function teacherOverviewHtml() {
         </div>
       `,
     })}
+  `;
+
+  const actionsContent = `
     <div class="grid two">
       ${sectionCard({
         title: "Open Attendance Session",
@@ -282,9 +309,58 @@ export async function teacherOverviewHtml() {
       body: `<p class="muted">Uses default query: class_id=1, current month range.</p>`,
     })}
   `;
+
+  return `
+    ${warning ? `<article class="card"><p class="muted">API Notice: ${warning}</p></article>` : ""}
+    <div class="grid stats">
+      <article class="card stat-card"><p class="muted stat-label">My Classes</p><div class="metric">${classes.length}</div></article>
+      <article class="card stat-card"><p class="muted stat-label">Draft Announcements</p><div class="metric">${drafts}</div></article>
+      <article class="card stat-card"><p class="muted stat-label">Pending Absence Reviews</p><div class="metric">${pendingReports}</div></article>
+      <article class="card stat-card"><p class="muted stat-label">Comments Needing Review</p><div class="metric">${comments.length}</div></article>
+    </div>
+    ${featureTabsHtml({
+      idPrefix: "teacher-overview",
+      tabs: [
+        { id: "workspace", label: "Overview", content: workspaceContent },
+        { id: "insights", label: "Insights", content: insightsContent },
+        { id: "actions", label: "Actions", content: actionsContent },
+      ],
+    })}
+  `;
 }
 
 export function bindTeacherActions({ toast }) {
+  document.querySelectorAll("[data-feature-tabs='teacher-overview']").forEach((root) => {
+    const buttons = Array.from(root.querySelectorAll("[data-feature-tab]"));
+    const panels = Array.from(root.querySelectorAll("[data-feature-panel]"));
+    const activate = (key) => {
+      buttons.forEach((btn) => {
+        const on = btn.getAttribute("data-feature-tab") === key;
+        btn.classList.toggle("active", on);
+        btn.setAttribute("aria-selected", on ? "true" : "false");
+      });
+      panels.forEach((panel) => {
+        panel.classList.toggle("active", panel.getAttribute("data-feature-panel") === key);
+      });
+    };
+    buttons.forEach((btn) => btn.addEventListener("click", () => activate(btn.getAttribute("data-feature-tab"))));
+  });
+  document.querySelectorAll("[data-feature-tabs='teacher-announcements']").forEach((root) => {
+    const buttons = Array.from(root.querySelectorAll("[data-feature-tab]"));
+    const panels = Array.from(root.querySelectorAll("[data-feature-panel]"));
+    const activate = (key) => {
+      buttons.forEach((btn) => {
+        const on = btn.getAttribute("data-feature-tab") === key;
+        btn.classList.toggle("active", on);
+        btn.setAttribute("aria-selected", on ? "true" : "false");
+      });
+      panels.forEach((panel) => {
+        panel.classList.toggle("active", panel.getAttribute("data-feature-panel") === key);
+      });
+    };
+    buttons.forEach((btn) => btn.addEventListener("click", () => activate(btn.getAttribute("data-feature-tab"))));
+  });
+
   document.getElementById("teacher-go-announcements-btn")?.addEventListener("click", () => {
     rerenderView("announcements");
     toast?.("Switched to the Announcements tab.");
@@ -576,7 +652,7 @@ export async function teacherAnnouncementsHtml() {
   const highlightCommentId = Number(flash?.commentId);
   const highlightAbsenceId = Number(flash?.absenceReportId);
 
-  return `
+  const createContent = `
     ${sectionCard({
       title: "Create Announcement",
       body: `
@@ -590,10 +666,12 @@ export async function teacherAnnouncementsHtml() {
       <div id="announcement-optimistic-list" class="grid" style="margin-top:12px;"></div>
     `,
     })}
-    <div class="grid two">
-      ${sectionCard({
-        title: "Announcement Actions",
-        body: `
+  `;
+
+  const announcementsContent = `
+    ${sectionCard({
+      title: "Announcement Actions",
+      body: `
         <form id="teacher-publish-announcement-form" class="row">
           <select class="input" name="announcement_id" required ${announcements.length ? "" : "disabled"}>
             <option value="">Select an announcement</option>
@@ -617,10 +695,13 @@ export async function teacherAnnouncementsHtml() {
           </table>
         </div>
       `,
-      })}
-      ${sectionCard({
-        title: "Comment Moderation",
-        body: `
+    })}
+  `;
+
+  const moderationContent = `
+    ${sectionCard({
+      title: "Comment Moderation",
+      body: `
         <form id="teacher-comment-action-form" class="grid">
           <div class="row">
             <select class="input" name="comment_id" required ${comments.length ? "" : "disabled"}>
@@ -643,8 +724,10 @@ export async function teacherAnnouncementsHtml() {
           </table>
         </div>
       `,
-      })}
-    </div>
+    })}
+  `;
+
+  const absenceContent = `
     ${sectionCard({
       title: "Absence Review",
       body: `
@@ -668,6 +751,18 @@ export async function teacherAnnouncementsHtml() {
         </table>
       </div>
     `,
+    })}
+  `;
+
+  return `
+    ${featureTabsHtml({
+      idPrefix: "teacher-announcements",
+      tabs: [
+        { id: "create", label: "Create", content: createContent },
+        { id: "announcements", label: "Announcements", content: announcementsContent },
+        { id: "moderation", label: "Comment Moderation", content: moderationContent },
+        { id: "absence", label: "Absence Review", content: absenceContent },
+      ],
     })}
   `;
 }
@@ -697,12 +792,23 @@ export async function teacherReportsHtml() {
         <canvas id="teacher-weekly-chart"></canvas>
       </div>
       <div id="teacher-stat-badges" class="actions" style="margin-top:12px;"></div>
+      <div id="teacher-risk-list" class="table-wrap" style="margin-top:12px;"></div>
       <div class="actions" style="margin-top:20px;">
         <button id="export-att-btn" class="btn btn-outline">Export Attendance CSV</button>
       </div>
       <form id="teacher-attendance-query-form" class="row" style="margin-top:12px;">
         <input class="input" name="class_id" type="number" placeholder="Class ID" required />
-        <input class="input" name="attendance_date" type="date" required />
+        <input class="input" name="attendance_date" type="date" />
+        <input class="input" name="from" type="date" />
+        <input class="input" name="to" type="date" />
+        <select class="select" name="status">
+          <option value="">Any status</option>
+          <option value="present">Present</option>
+          <option value="late">Late</option>
+          <option value="absent">Absent</option>
+          <option value="excused">Excused</option>
+        </select>
+        <input class="input" name="search" placeholder="Search name or student #" />
         <button class="btn btn-outline" type="submit">Load Attendance</button>
       </form>
       <div class="table-wrap" style="margin-top:10px;">
@@ -753,6 +859,7 @@ export async function bindTeacherReportChart({ toast } = {}) {
     let values = [0, 0, 0, 0, 0, 0, 0];
     let label = "Attendance records";
     let statusCounts = null;
+    let atRiskStudents = [];
 
     const params = new URLSearchParams();
     if (classSelect?.value) params.set("class_id", classSelect.value);
@@ -768,6 +875,7 @@ export async function bindTeacherReportChart({ toast } = {}) {
         label = chart.label || label;
       }
       statusCounts = stats.data?.status_counts || null;
+      atRiskStudents = Array.isArray(stats.data?.at_risk_students) ? stats.data.at_risk_students : [];
     } catch (err) {
       toast?.(err.message || "Unable to load teacher statistics.", "error");
     }
@@ -786,6 +894,27 @@ export async function bindTeacherReportChart({ toast } = {}) {
         <span class="badge warn">Late: ${statusCounts.late ?? 0}</span>
         <span class="badge">Absent: ${statusCounts.absent ?? 0}</span>
         <span class="badge">Excused: ${statusCounts.excused ?? 0}</span>
+      `;
+    }
+
+    const riskRoot = document.getElementById("teacher-risk-list");
+    if (riskRoot) {
+      riskRoot.innerHTML = `
+        <table>
+          <thead><tr><th>At-risk student</th><th>Recent Absences</th><th>Consecutive</th><th>Risk</th></tr></thead>
+          <tbody>
+            ${
+              atRiskStudents.map((s) => `
+                <tr>
+                  <td>${s.student_name || "-"} ${s.student_number ? `<span class="muted">(${s.student_number})</span>` : ""}</td>
+                  <td>${s.recent_absences ?? 0}</td>
+                  <td>${s.consecutive_absences ?? 0}</td>
+                  <td><span class="badge ${s.risk_level === "high" ? "warn" : ""}">${s.risk_level || "low"} (${s.risk_score ?? 0})</span></td>
+                </tr>
+              `).join("") || '<tr><td colspan="4" class="muted">No at-risk students for this range.</td></tr>'
+            }
+          </tbody>
+        </table>
       `;
     }
   };
@@ -815,7 +944,16 @@ export async function bindTeacherReportChart({ toast } = {}) {
     e.preventDefault();
     const data = Object.fromEntries(new FormData(e.currentTarget).entries());
     try {
-      const res = await api(`/api/teacher/attendance?class_id=${data.class_id}&attendance_date=${data.attendance_date}`);
+      const qs = new URLSearchParams();
+      qs.set("class_id", String(data.class_id));
+      if (data.attendance_date) qs.set("attendance_date", String(data.attendance_date));
+      if (data.from && data.to) {
+        qs.set("from", String(data.from));
+        qs.set("to", String(data.to));
+      }
+      if (data.status) qs.set("status", String(data.status));
+      if (data.search) qs.set("search", String(data.search));
+      const res = await api(`/api/teacher/attendance?${qs.toString()}`);
       const rows = listFrom(res);
       const target = document.getElementById("teacher-attendance-query-results");
       if (target) {

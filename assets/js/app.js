@@ -80,8 +80,14 @@ registerRoute("/dashboard", async () => {
 
 registerRoute("/404", () => {
   document.getElementById("app").innerHTML = `
-    <section class="auth-wrap"><article class="card"><h3>Page not found</h3></article></section>
-  `;
+    <section class="auth-wrap">
+      <article class="card empty-state" style="max-width:400px;">
+        <h3>Page not found</h3>
+        <p class="muted">This route does not exist. Return to your dashboard from the login page.</p>
+        <p style="margin-top:16px;"><button type="button" class="btn btn-primary" id="404-home-btn">Go to sign in</button></p>
+      </article>
+    </section>`;
+  document.getElementById("404-home-btn")?.addEventListener("click", () => go(guard() ? "/dashboard" : "/login"));
 });
 
 window.addEventListener("sars:unauthorized", () => {
@@ -93,8 +99,10 @@ window.addEventListener("sars:loading", (event) => {
   const pending = Number(event?.detail?.pending || 0);
   const loadingEl = document.getElementById("global-loading");
   if (!loadingEl) return;
-  loadingEl.classList.toggle("show", pending > 0);
-  if (pending > 0) startProgress();
+  const busy = pending > 0;
+  loadingEl.classList.toggle("show", busy);
+  loadingEl.setAttribute("aria-busy", busy ? "true" : "false");
+  if (busy) startProgress();
   else finishProgress();
 });
 

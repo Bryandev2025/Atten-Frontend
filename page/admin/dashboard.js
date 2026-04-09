@@ -10,6 +10,41 @@ function listFrom(resp) {
   return [];
 }
 
+function featureTabsHtml({ idPrefix, tabs }) {
+  const nav = tabs
+    .map(
+      (tab, index) => `
+      <button
+        type="button"
+        class="feature-tab-btn ${index === 0 ? "active" : ""}"
+        data-feature-tab="${idPrefix}:${tab.id}"
+        aria-selected="${index === 0 ? "true" : "false"}"
+        role="tab"
+      >${tab.label}</button>
+    `,
+    )
+    .join("");
+  const panels = tabs
+    .map(
+      (tab, index) => `
+      <section
+        class="feature-tab-panel ${index === 0 ? "active" : ""}"
+        data-feature-panel="${idPrefix}:${tab.id}"
+        role="tabpanel"
+      >
+        ${tab.content}
+      </section>
+    `,
+    )
+    .join("");
+  return `
+    <div class="feature-tabs" data-feature-tabs="${idPrefix}">
+      <nav class="feature-tab-nav" role="tablist">${nav}</nav>
+      <div class="feature-tab-content">${panels}</div>
+    </div>
+  `;
+}
+
 
 export async function adminOverviewHtml() {
   let users = [];
@@ -190,11 +225,14 @@ export async function adminOverviewHtml() {
 
 export async function adminReportsHtml() {
   let reports = [];
+  let atRiskStudents = [];
   try {
     const res = await api("/api/admin/absence-reports");
     reports = listFrom(res);
+    atRiskStudents = Array.isArray(res?.summary?.at_risk_students) ? res.summary.at_risk_students : [];
   } catch {
     reports = [];
+    atRiskStudents = [];
   }
   const flash = consumeUiFlash("admin");
   const flashReports = flash?.view === "reports" ? flash : null;
@@ -212,6 +250,26 @@ export async function adminReportsHtml() {
         <h3 style="margin:0;">Absence Reports</h3>
         <button id="admin-export-absence-btn" class="btn btn-outline" type="button">Export CSV</button>
       </div>
+      <form id="admin-reports-filter-form" class="grid" style="margin-top:10px;">
+        <div class="row">
+          <select class="select" name="status">
+            <option value="">Any status</option>
+            <option value="pending">Pending</option>
+            <option value="approved">Approved</option>
+            <option value="rejected">Rejected</option>
+          </select>
+          <input class="input" name="class_id" type="number" placeholder="Class ID" />
+          <input class="input" name="student_id" type="number" placeholder="Student ID" />
+        </div>
+        <div class="row">
+          <input class="input" name="from" type="date" />
+          <input class="input" name="to" type="date" />
+          <input class="input" name="search" placeholder="Search name, student #, reason" />
+        </div>
+        <div class="actions">
+          <button class="btn btn-primary" type="submit">Apply Filters</button>
+        </div>
+      </form>
       <form id="admin-absence-action-form" class="row" style="margin-top:10px;">
         <select class="input" name="absence_report_id" required ${reports.length ? "" : "disabled"}>
           <option value="">Select an absence report</option>
@@ -240,6 +298,25 @@ export async function adminReportsHtml() {
           </tbody>
         </table>
       </div>
+      <h3 style="margin-top:14px;">At-risk students</h3>
+      <div class="table-wrap" style="margin-top:8px;">
+        <table>
+          <thead><tr><th>Student</th><th>Class</th><th>Recent Absences</th><th>Consecutive</th><th>Risk</th></tr></thead>
+          <tbody>
+            ${
+              atRiskStudents.map((s) => `
+                <tr>
+                  <td>${s.student_name || "-"} ${s.student_number ? `<span class="muted">(${s.student_number})</span>` : ""}</td>
+                  <td>${s.class_name || s.class_id || "-"}</td>
+                  <td>${s.recent_absences ?? 0}</td>
+                  <td>${s.consecutive_absences ?? 0}</td>
+                  <td><span class="badge ${s.risk_level === "high" ? "warn" : ""}">${s.risk_level || "low"} (${s.risk_score ?? 0})</span></td>
+                </tr>
+              `).join("") || '<tr><td colspan="5" class="muted">No at-risk students found for current filter context.</td></tr>'
+            }
+          </tbody>
+        </table>
+      </div>
     </article>
   `;
 }
@@ -249,35 +326,47 @@ export async function adminSettingsHtml() {
   let comments = [];
   let roles = [];
   let programs = [];
+  let classes = [];
+  let users = [];
   let subjects = [];
   try {
-    const [aRes, cRes, roleRes, pRes, sRes] = await Promise.all([
+    const [aRes, cRes, roleRes, pRes, classRes, userRes, sRes] = await Promise.all([
       api("/api/admin/announcements"),
       api("/api/admin/announcement-comments"),
       api("/api/roles"),
       api("/api/admin/programs").catch(() => ({ data: [] })),
+      api("/api/admin/classes").catch(() => ({ data: [] })),
+      api("/api/admin/users").catch(() => ({ data: [] })),
       api("/api/admin/subjects").catch(() => ({ data: [] })),
     ]);
     announcements = listFrom(aRes);
     comments = listFrom(cRes);
     roles = listFrom(roleRes);
     programs = listFrom(pRes);
+    classes = listFrom(classRes);
+    users = listFrom(userRes);
     subjects = listFrom(sRes);
   } catch {
     announcements = [];
     comments = [];
     roles = [];
   }
+  const teachers = users.filter((u) => String(u.role?.name || u.role || "").toLowerCase() === "teacher");
   const flash = consumeUiFlash("admin");
   const flashSettings = flash?.view === "settings" ? flash : null;
 
-  return `
+  const userManagementContent = `
     ${flashSettings?.message ? `<article class="card"><p class="badge ok">${flashSettings.message}</p></article>` : ""}
     <article class="card">
       <h3>Import Users</h3>
-      <p class="muted">Uses POST /api/admin/users-import</p>
-      <div class="actions">
-        <input id="admin-users-import-file" class="input" type="file" accept=".csv,.xlsx,.xls" />
+      <p class="muted">Uses POST /api/admin/users-import (CSV/TXT only, Laravel multipart upload)</p>
+      <div class="upload-field">
+        <input id="admin-users-import-file" class="upload-native-input" type="file" accept=".csv,.txt,text/csv,text/plain" />
+        <label for="admin-users-import-file" class="btn btn-outline" role="button">Choose File</label>
+        <span id="admin-users-import-name" class="upload-file-name muted">No file chosen</span>
+        <button id="admin-users-import-clear" class="btn btn-outline" type="button">Remove</button>
+      </div>
+      <div class="actions" style="margin-top:10px;">
         <button id="admin-users-import-btn" class="btn btn-primary" type="button">Import</button>
       </div>
     </article>
@@ -312,6 +401,9 @@ export async function adminSettingsHtml() {
         </form>
       </article>
     </div>
+  `;
+
+  const schoolYearsContent = `
     <div class="grid two">
       <article class="card">
         <h3>Create School Year</h3>
@@ -333,9 +425,29 @@ export async function adminSettingsHtml() {
         </form>
       </article>
     </div>
+  `;
+
+  const academicContent = `
     <article class="card">
       <h3>Academic structure</h3>
       <p class="muted">Programmes (IT, BSEd Math, BSEd Social Studies) and subjects are seeded; link classes to a programme and assign teachers to each subject.</p>
+      <div class="grid two" style="margin-top:10px;">
+        <div>
+          <h4 style="margin:0 0 8px;">Add subject</h4>
+          <form id="admin-create-subject-form" class="grid">
+            <div class="row">
+              <input class="input" name="code" placeholder="Code (optional) e.g. MATH101" />
+              <input class="input" name="name" placeholder="Subject name" required />
+            </div>
+            <textarea class="textarea" name="description" placeholder="Description (optional)"></textarea>
+            <button class="btn btn-primary" type="submit">Save subject</button>
+          </form>
+          <p class="muted" style="font-size:12px;margin-top:8px;">This is dynamic: any subject you add here will instantly appear anywhere the app loads subjects.</p>
+        </div>
+        <div class="card" style="background:transparent;padding:0;border:none;">
+          <p class="muted" style="margin:0;">Tip: you can delete a subject from the list. If it’s already used in assignments/timetables, the API may block deletion.</p>
+        </div>
+      </div>
       <div class="grid two" style="margin-top:10px;">
         <div class="table-wrap">
           <table>
@@ -347,27 +459,96 @@ export async function adminSettingsHtml() {
         </div>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>ID</th><th>Code</th><th>Subject</th></tr></thead>
+            <thead><tr><th>ID</th><th>Code</th><th>Subject</th><th></th></tr></thead>
             <tbody>
-              ${subjects.slice(0, 18).map((s) => `<tr><td>${s.id}</td><td class="muted">${s.code || "-"}</td><td>${s.name || "-"}</td></tr>`).join("") || '<tr><td colspan="3" class="muted">No subjects.</td></tr>'}
+              ${subjects.map((s) => `
+                <tr>
+                  <td>${s.id}</td>
+                  <td class="muted">${s.code || "-"}</td>
+                  <td>${s.name || "-"}</td>
+                  <td style="text-align:right;">
+                    <button class="btn btn-outline btn-xs" type="button" data-admin-delete-subject="${s.id}">Delete</button>
+                  </td>
+                </tr>
+              `).join("") || '<tr><td colspan="4" class="muted">No subjects.</td></tr>'}
             </tbody>
           </table>
         </div>
       </div>
-      <p class="muted" style="font-size:12px;">Full subject list is truncated; use IDs when assigning teachers.</p>
+      <p class="muted" style="font-size:12px;">Use Subject IDs when assigning teachers.</p>
     </article>
     <article class="card">
       <h3>Assign teacher to class subject</h3>
       <p class="muted">POST /api/admin/class-subject-teachers — each teacher may teach at most 3 <em>different</em> subjects per school year.</p>
       <form id="admin-assign-subject-teacher-form" class="grid">
         <div class="row">
-          <input class="input" name="class_id" type="number" placeholder="Class ID" required />
-          <input class="input" name="subject_id" type="number" placeholder="Subject ID" required />
-          <input class="input" name="teacher_id" type="number" placeholder="Teacher user ID" required />
+          <select class="select" name="class_id" required ${classes.length ? "" : "disabled"}>
+            <option value="">Class</option>
+            ${classes.map((c) => `<option value="${c.id}">#${c.id} — ${c.class_name || c.section || "Class"} (${c.school_year?.name || "SY"})</option>`).join("")}
+          </select>
+          <select class="select" name="subject_id" required ${subjects.length ? "" : "disabled"}>
+            <option value="">Subject</option>
+            ${subjects.map((s) => `<option value="${s.id}">${s.code ? `${s.code} — ` : ""}${s.name}</option>`).join("")}
+          </select>
+          <select class="select" name="teacher_id" required ${teachers.length ? "" : "disabled"}>
+            <option value="">Teacher</option>
+            ${teachers.map((t) => `<option value="${t.id}">#${t.id} — ${t.full_name || t.name || t.email || "Teacher"}</option>`).join("")}
+          </select>
         </div>
         <button class="btn btn-primary" type="submit">Save assignment</button>
       </form>
     </article>
+    <article class="card">
+      <h3>Timetable slots</h3>
+      <p class="muted">Create a weekly timetable row for a class. Subjects here come from the dynamic Admin subject list.</p>
+      <form id="admin-create-timetable-slot-form" class="grid">
+        <div class="row">
+          <select id="admin-timetable-class" class="select" name="class_id" required ${classes.length ? "" : "disabled"}>
+            <option value="">Class</option>
+            ${classes.map((c) => `<option value="${c.id}">#${c.id} — ${c.class_name || c.section || "Class"} (${c.school_year?.name || "SY"})</option>`).join("")}
+          </select>
+          <select class="select" name="day_of_week" required>
+            <option value="">Day</option>
+            <option value="1">Mon</option>
+            <option value="2">Tue</option>
+            <option value="3">Wed</option>
+            <option value="4">Thu</option>
+            <option value="5">Fri</option>
+            <option value="6">Sat</option>
+            <option value="7">Sun</option>
+          </select>
+        </div>
+        <div class="row">
+          <input class="input" name="start_time" type="time" required />
+          <input class="input" name="end_time" type="time" required />
+          <input class="input" name="room" placeholder="Room (optional)" />
+        </div>
+        <div class="row">
+          <select class="select" name="subject_id" required ${subjects.length ? "" : "disabled"}>
+            <option value="">Subject</option>
+            ${subjects.map((s) => `<option value="${s.id}">${s.code ? `${s.code} — ` : ""}${s.name}</option>`).join("")}
+          </select>
+          <select class="select" name="teacher_id" required ${teachers.length ? "" : "disabled"}>
+            <option value="">Teacher</option>
+            ${teachers.map((t) => `<option value="${t.id}">#${t.id} — ${t.full_name || t.name || t.email || "Teacher"}</option>`).join("")}
+          </select>
+        </div>
+        <div class="actions">
+          <button class="btn btn-primary" type="submit">Add timetable slot</button>
+          <button id="admin-load-timetable-btn" class="btn btn-outline" type="button">Load timetable</button>
+        </div>
+      </form>
+      <p id="admin-timetable-hint" class="muted"></p>
+      <div id="admin-timetable-list" class="table-wrap" style="margin-top:10px;">
+        <table>
+          <thead><tr><th>ID</th><th>Day</th><th>Time</th><th>Subject</th><th>Teacher</th><th>Room</th><th></th></tr></thead>
+          <tbody><tr><td colspan="7" class="muted">Select a class and click “Load timetable”.</td></tr></tbody>
+        </table>
+      </div>
+    </article>
+  `;
+
+  const classesContent = `
     <div class="grid two">
       <article class="card">
         <h3>Create Class</h3>
@@ -397,6 +578,9 @@ export async function adminSettingsHtml() {
         </form>
       </article>
     </div>
+  `;
+
+  const moderationContent = `
     <div class="grid two">
       <article class="card">
         <h3>Announcements Moderation</h3>
@@ -450,6 +634,19 @@ export async function adminSettingsHtml() {
       </article>
     </div>
   `;
+
+  return `
+    ${featureTabsHtml({
+      idPrefix: "admin-settings",
+      tabs: [
+        { id: "users", label: "User Management", content: userManagementContent },
+        { id: "school-years", label: "School Years", content: schoolYearsContent },
+        { id: "academic", label: "Academic Setup", content: academicContent },
+        { id: "classes", label: "Classes", content: classesContent },
+        { id: "moderation", label: "Moderation", content: moderationContent },
+      ],
+    })}
+  `;
 }
 
 export function bindAdminActions({ toast } = {}) {
@@ -480,6 +677,133 @@ export function bindAdminActions({ toast } = {}) {
   document.getElementById("admin-export-absence-quick-btn")?.addEventListener("click", async () => {
     await download("/api/admin/absence-reports-export", "absence-reports.csv");
     toast?.("Absence reports export downloaded.");
+  });
+
+  document.getElementById("admin-create-subject-form")?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const data = Object.fromEntries(new FormData(e.currentTarget).entries());
+    setFormSubmitting(e.currentTarget, true, "Saving...");
+    try {
+      await api("/api/admin/subjects", {
+        method: "POST",
+        body: JSON.stringify({
+          code: String(data.code || "").trim() || null,
+          name: String(data.name || "").trim(),
+          description: String(data.description || "").trim() || null,
+        }),
+      });
+      toast?.("Subject saved.");
+      setUiFlash("admin", { view: "settings", message: "Subject saved." });
+      rerenderView("settings");
+    } catch (err) {
+      toast?.(err.message || "Unable to save subject.", "error");
+    } finally {
+      setFormSubmitting(e.currentTarget, false);
+    }
+  });
+
+  document.querySelectorAll("[data-admin-delete-subject]")?.forEach((btn) => {
+    btn.addEventListener("click", async (e) => {
+      const id = Number(e.currentTarget?.getAttribute("data-admin-delete-subject"));
+      if (!id) return;
+      try {
+        await api(`/api/admin/subjects/${id}`, { method: "DELETE" });
+        toast?.("Subject deleted.");
+        setUiFlash("admin", { view: "settings", message: "Subject deleted." });
+        rerenderView("settings");
+      } catch (err) {
+        toast?.(err.message || "Unable to delete subject.", "error");
+      }
+    });
+  });
+
+  async function loadTimetableSlotsForSelectedClass() {
+    const classId = Number(document.getElementById("admin-timetable-class")?.value);
+    setInlineHint("admin-timetable-hint", "");
+    if (!classId) {
+      setInlineHint("admin-timetable-hint", "Select a class first.");
+      return;
+    }
+    const wrap = document.getElementById("admin-timetable-list");
+    if (!wrap) return;
+    wrap.innerHTML = `
+      <table>
+        <thead><tr><th>ID</th><th>Day</th><th>Time</th><th>Subject</th><th>Teacher</th><th>Room</th><th></th></tr></thead>
+        <tbody><tr><td colspan="7" class="muted">Loading...</td></tr></tbody>
+      </table>
+    `;
+    try {
+      const res = await api(`/api/admin/timetable-slots?class_id=${classId}`);
+      const rows = listFrom(res);
+      const dayName = (d) => ["", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"][Number(d) || 0] || "-";
+      wrap.innerHTML = `
+        <table>
+          <thead><tr><th>ID</th><th>Day</th><th>Time</th><th>Subject</th><th>Teacher</th><th>Room</th><th></th></tr></thead>
+          <tbody>
+            ${
+              rows.map((r) => `
+                <tr>
+                  <td>${r.id ?? "-"}</td>
+                  <td>${dayName(r.day_of_week)}</td>
+                  <td class="muted">${r.start_time || "-"}–${r.end_time || "-"}</td>
+                  <td>${r.subject?.name || r.subject_id || "-"}</td>
+                  <td>${r.teacher?.full_name || r.teacher?.name || r.teacher_id || "-"}</td>
+                  <td class="muted">${r.room || "-"}</td>
+                  <td style="text-align:right;">
+                    <button class="btn btn-outline btn-xs" type="button" data-admin-delete-slot="${r.id}">Delete</button>
+                  </td>
+                </tr>
+              `).join("") || `<tr><td colspan="7" class="muted">No timetable slots for this class yet.</td></tr>`
+            }
+          </tbody>
+        </table>
+      `;
+      wrap.querySelectorAll("[data-admin-delete-slot]")?.forEach((btn) => {
+        btn.addEventListener("click", async (e) => {
+          const id = Number(e.currentTarget?.getAttribute("data-admin-delete-slot"));
+          if (!id) return;
+          try {
+            await api(`/api/admin/timetable-slots/${id}`, { method: "DELETE" });
+            toast?.("Timetable slot deleted.");
+            loadTimetableSlotsForSelectedClass();
+          } catch (err) {
+            toast?.(err.message || "Unable to delete slot.", "error");
+          }
+        });
+      });
+    } catch (err) {
+      setInlineHint("admin-timetable-hint", err.message || "Unable to load timetable slots.");
+    }
+  }
+
+  document.getElementById("admin-load-timetable-btn")?.addEventListener("click", loadTimetableSlotsForSelectedClass);
+  document.getElementById("admin-timetable-class")?.addEventListener("change", loadTimetableSlotsForSelectedClass);
+
+  document.getElementById("admin-create-timetable-slot-form")?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const data = Object.fromEntries(new FormData(e.currentTarget).entries());
+    setInlineHint("admin-timetable-hint", "");
+    setFormSubmitting(e.currentTarget, true, "Saving...");
+    try {
+      await api("/api/admin/timetable-slots", {
+        method: "POST",
+        body: JSON.stringify({
+          class_id: Number(data.class_id),
+          day_of_week: Number(data.day_of_week),
+          start_time: data.start_time,
+          end_time: data.end_time,
+          subject_id: Number(data.subject_id),
+          teacher_id: Number(data.teacher_id),
+          room: String(data.room || "").trim() || null,
+        }),
+      });
+      toast?.("Timetable slot added.");
+      loadTimetableSlotsForSelectedClass();
+    } catch (err) {
+      toast?.(err.message || "Unable to add timetable slot.", "error");
+    } finally {
+      setFormSubmitting(e.currentTarget, false);
+    }
   });
 
   document.getElementById("admin-set-active-year-form")?.addEventListener("submit", async (e) => {
@@ -566,22 +890,110 @@ export async function bindAdminReportChart({ toast } = {}) {
       setFormSubmitting(e.currentTarget, false);
     }
   });
+
+  document.getElementById("admin-reports-filter-form")?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const data = Object.fromEntries(new FormData(e.currentTarget).entries());
+    const qs = new URLSearchParams();
+    if (data.status) qs.set("status", String(data.status));
+    if (data.class_id) qs.set("class_id", String(data.class_id));
+    if (data.student_id) qs.set("student_id", String(data.student_id));
+    if (data.from && data.to) {
+      qs.set("from", String(data.from));
+      qs.set("to", String(data.to));
+    }
+    if (data.search) qs.set("search", String(data.search));
+
+    try {
+      const res = await api(`/api/admin/absence-reports?${qs.toString()}`);
+      const rows = listFrom(res).slice(0, 10);
+      const atRiskRows = Array.isArray(res?.summary?.at_risk_students) ? res.summary.at_risk_students : [];
+
+      const reportBody = document.querySelector("#admin-absence-action-form")
+        ?.closest("article")
+        ?.querySelector("table tbody");
+      if (reportBody) {
+        reportBody.innerHTML = rows.map((item) => `
+          <tr>
+            <td>${item.id ?? "-"}</td>
+            <td>${item.student?.full_name || item.student?.name || item.student_id || "-"}</td>
+            <td><span class="badge">${item.status || "-"}</span></td>
+            <td>${item.absent_date || item.created_at || "-"}</td>
+          </tr>
+        `).join("") || '<tr><td colspan="4" class="muted">No absence reports match your filters.</td></tr>';
+      }
+
+      const riskBody = Array.from(document.querySelectorAll("article .table-wrap table tbody")).pop();
+      if (riskBody) {
+        riskBody.innerHTML = atRiskRows.map((s) => `
+          <tr>
+            <td>${s.student_name || "-"} ${s.student_number ? `<span class="muted">(${s.student_number})</span>` : ""}</td>
+            <td>${s.class_name || s.class_id || "-"}</td>
+            <td>${s.recent_absences ?? 0}</td>
+            <td>${s.consecutive_absences ?? 0}</td>
+            <td><span class="badge ${s.risk_level === "high" ? "warn" : ""}">${s.risk_level || "low"} (${s.risk_score ?? 0})</span></td>
+          </tr>
+        `).join("") || '<tr><td colspan="5" class="muted">No at-risk students found.</td></tr>';
+      }
+      toast?.("Report filters applied.");
+    } catch (err) {
+      toast?.(err.message || "Unable to apply report filters.", "error");
+    }
+  });
 }
 
 export function bindAdminSettingsActions({ toast } = {}) {
+  document.querySelectorAll("[data-feature-tabs='admin-settings']").forEach((root) => {
+    const buttons = Array.from(root.querySelectorAll("[data-feature-tab]"));
+    const panels = Array.from(root.querySelectorAll("[data-feature-panel]"));
+    const activate = (key) => {
+      buttons.forEach((btn) => {
+        const on = btn.getAttribute("data-feature-tab") === key;
+        btn.classList.toggle("active", on);
+        btn.setAttribute("aria-selected", on ? "true" : "false");
+      });
+      panels.forEach((panel) => {
+        const on = panel.getAttribute("data-feature-panel") === key;
+        panel.classList.toggle("active", on);
+      });
+    };
+    buttons.forEach((btn) => btn.addEventListener("click", () => activate(btn.getAttribute("data-feature-tab"))));
+  });
+
+  const importFileInput = document.getElementById("admin-users-import-file");
+  const importFileName = document.getElementById("admin-users-import-name");
+  const importClearBtn = document.getElementById("admin-users-import-clear");
+  const syncImportFileName = () => {
+    if (!importFileName) return;
+    const file = importFileInput?.files?.[0];
+    importFileName.textContent = file?.name || "No file chosen";
+  };
+  importFileInput?.addEventListener("change", syncImportFileName);
+  importClearBtn?.addEventListener("click", () => {
+    if (importFileInput) importFileInput.value = "";
+    syncImportFileName();
+  });
+  syncImportFileName();
+
   document.getElementById("admin-users-import-btn")?.addEventListener("click", async () => {
-    const fileInput = document.getElementById("admin-users-import-file");
-    const file = fileInput?.files?.[0];
+    const file = importFileInput?.files?.[0];
     if (!file) return toast?.("Select a file first.", "error");
+    const fileName = String(file.name || "").toLowerCase();
+    const isAllowed = fileName.endsWith(".csv") || fileName.endsWith(".txt");
+    if (!isAllowed) {
+      toast?.("Invalid file type. Upload a .csv or .txt file.", "error");
+      return;
+    }
     const formData = new FormData();
     formData.append("file", file);
     try {
       await api("/api/admin/users-import", {
         method: "POST",
-        headers: {},
         body: formData,
       });
       toast?.("User import submitted successfully.");
+      if (importFileInput) importFileInput.value = "";
+      syncImportFileName();
     } catch (err) {
       toast?.(err.message || "Unable to import users.", "error");
     }

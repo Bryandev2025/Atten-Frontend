@@ -3,12 +3,19 @@ export function renderAuthShell() {
     <section class="auth-wrap">
       <div class="auth-card">
         <form id="login-form" class="auth-form">
-          <h2>Student Absence Report System</h2>
-          <label class="label">Email</label>
-          <input class="input" name="email" type="email" required placeholder="you@example.com" />
-          <label class="label">Password</label>
-          <input class="input" name="password" type="password" required placeholder="password" />
-          <button class="btn btn-primary" type="submit">Login</button>
+          <div class="auth-form-header">
+            <h2>Sign in</h2>
+            <p>Student Absence Report System — use your school credentials.</p>
+          </div>
+          <div>
+            <label class="label" for="login-email">Email</label>
+            <input id="login-email" class="input" name="email" type="email" required autocomplete="email" placeholder="you@school.edu" />
+          </div>
+          <div>
+            <label class="label" for="login-password">Password</label>
+            <input id="login-password" class="input" name="password" type="password" required autocomplete="current-password" placeholder="••••••••" />
+          </div>
+          <button class="btn btn-primary" type="submit" style="width:100%;">Continue</button>
         </form>
       </div>
     </section>
@@ -16,7 +23,15 @@ export function renderAuthShell() {
 }
 
 export function dashboardShell({ title, subtitle, name, role, nav }) {
-  const initials = String(name).split(" ").filter(Boolean).slice(0, 2).map((n) => n[0]).join("").toUpperCase() || "U";
+  const initials = String(name)
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((n) => n[0])
+    .join("")
+    .toUpperCase() || "U";
+  const roleLabel = role ? String(role).charAt(0).toUpperCase() + String(role).slice(1) : "User";
+
   const iconFor = (view) => {
     if (view.includes("overview") || view.includes("panel")) return "home";
     if (view.includes("report")) return "chart";
@@ -27,6 +42,7 @@ export function dashboardShell({ title, subtitle, name, role, nav }) {
     if (view.includes("profile")) return "user";
     return "dot";
   };
+
   const iconSvg = (kind) => {
     if (kind === "home") {
       return `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11.5 12 4l9 7.5v8a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/></svg>`;
@@ -51,54 +67,58 @@ export function dashboardShell({ title, subtitle, name, role, nav }) {
     }
     return `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/></svg>`;
   };
+
   const tabButtons = nav
     .map(
       (item, i) => `
     <button
       type="button"
       role="tab"
-      class="nav-link view-tab ${i === 0 ? "active" : ""}"
+      class="nav-link app-tab ${i === 0 ? "active" : ""}"
       data-view="${item.view}"
       id="dashboard-tab-${item.view}"
       aria-selected="${i === 0 ? "true" : "false"}"
       aria-controls="view-root"
     >
-      <span class="nav-icon">${iconSvg(iconFor(item.view))}</span>
+      <span class="app-tab-icon" aria-hidden="true">${iconSvg(iconFor(item.view))}</span>
       <span>${item.label}</span>
     </button>`,
     )
     .join("");
 
   return `
-    <section class="dashboard dashboard--tabs filament-layout">
-      <section class="content filament-content content-main">
-        <header class="topbar filament-topbar">
-          <div class="topbar-left">
-            <div class="brand brand--compact filament-brand">
-              <span class="brand-dot"></span>
+    <div class="app-shell">
+      <div class="app-main">
+        <header class="app-header">
+          <div class="app-header-left">
+            <div class="app-brand">
+              <span class="app-brand-mark" aria-hidden="true"></span>
               <div>
-                <div class="brand-title">Student Absence</div>
-                <div class="brand-subtitle">${role[0].toUpperCase() + role.slice(1)}</div>
+                <div class="app-brand-title">Absence &amp; Attendance</div>
+                <div class="app-brand-role">${roleLabel}</div>
               </div>
             </div>
-            <div class="title">
-              <p class="page-kicker">Dashboard</p>
-              <h2>${title}</h2>
-              <p>${subtitle}</p>
+            <div class="app-title-block">
+              <p class="eyebrow">Dashboard</p>
+              <h1>${title}</h1>
+              <p class="tagline">${subtitle}</p>
             </div>
           </div>
-          <div class="topbar-actions">
-            <button id="theme-toggle-btn" class="btn btn-outline" type="button">Theme</button>
-            <span class="user-chip"><span class="user-avatar">${initials}</span>${name}</span>
-            <button id="logout-btn" class="btn btn-danger" type="button">Logout</button>
+          <div class="app-header-actions">
+            <button id="theme-toggle-btn" class="btn btn-outline" type="button" aria-label="Toggle light or dark theme">Theme</button>
+            <span class="user-chip">
+              <span class="avatar" aria-hidden="true">${initials}</span>
+              <span>${name}</span>
+            </span>
+            <button id="logout-btn" class="btn btn-danger" type="button">Log out</button>
           </div>
         </header>
-        <nav class="view-tabs" role="tablist" aria-label="Dashboard sections">
+        <nav class="app-tabs" role="tablist" aria-label="Main sections">
           ${tabButtons}
         </nav>
-        <div id="view-root" class="filament-view-root" role="tabpanel" tabindex="0"></div>
-      </section>
-    </section>
+        <div id="view-root" class="app-view" role="tabpanel" tabindex="0"></div>
+      </div>
+    </div>
   `;
 }
 
@@ -117,12 +137,15 @@ export function panelHeader(title, subtitle = "", toolsHtml = "") {
 export function statCards(items = []) {
   return `
     <div class="grid stats">
-      ${items.map((item) => `
+      ${items
+        .map(
+          (item) => `
         <article class="card stat-card">
           <p class="muted stat-label">${item.label}</p>
           <div class="metric">${item.value}</div>
-        </article>
-      `).join("")}
+        </article>`,
+        )
+        .join("")}
     </div>
   `;
 }
