@@ -59,18 +59,24 @@ export async function studentOverviewHtml() {
   let readIds = new Set();
   let attendanceSummary = null;
   let warning = "";
+  let qrCard = null;
+  let curriculumRows = [];
   try {
-    const [announcementsResp, absenceReports, attendanceResp, statsResp] = await Promise.all([
+    const [announcementsResp, absenceReports, attendanceResp, statsResp, qrRes, subRes] = await Promise.all([
       api("/api/student/announcements"),
       api("/api/student/absence-reports"),
       api("/api/student/attendance"),
       api("/api/student/dashboard-stats"),
+      api("/api/student/qr-card").catch(() => ({ data: null })),
+      api("/api/student/my-subjects").catch(() => ({ data: [] })),
     ]);
     rows = listFrom(announcementsResp);
     reports = listFrom(absenceReports);
     attendanceRecords = listFrom(attendanceResp);
     readIds = new Set(Array.isArray(announcementsResp?.read_ids) ? announcementsResp.read_ids : []);
     attendanceSummary = statsResp?.data?.summary || null;
+    qrCard = qrRes?.data ?? null;
+    curriculumRows = listFrom(subRes);
   } catch (err) {
     warning = err.message || "Announcements unavailable.";
   }
@@ -87,7 +93,16 @@ export async function studentOverviewHtml() {
   const flashPanel = flash?.view === "panel" ? flash : null;
   const user = getSession()?.user || {};
   const userName = user.full_name || user.name || "Student";
-  const studentId = user.student_id || user.student_number || user.username || `STU${user.id || "-"}`;
+  const studentId =
+    qrCard?.student_number || user.student_id || user.student_number || user.username || `STU${user.id || "-"}`;
+  const programLabel = qrCard?.program_name || user.studentProfile?.schoolClass?.program?.name || "";
+  const yearLevelLabel = qrCard?.year_level || user.studentProfile?.schoolClass?.year_level || "";
+  const classLabel = qrCard?.class_name
+    ? `${qrCard.class_name}${qrCard.section ? ` — Sec ${qrCard.section}` : ""}`
+    : user.studentProfile?.schoolClass?.class_name || "";
+  const qrImgSrc = qrCard?.qr_payload
+    ? `https://quickchart.io/qr?size=180&text=${encodeURIComponent(qrCard.qr_payload)}`
+    : "";
   const attendanceRate = Number(attendanceSummary?.attendance_rate || 0);
   const rateSafe = Number.isFinite(attendanceRate) ? Math.max(0, Math.min(100, attendanceRate)) : 0;
   const pendingReports = reports.filter((r) => String(r.status || "").toLowerCase() === "pending").length;
@@ -111,7 +126,8 @@ export async function studentOverviewHtml() {
         subtitle: "Quick shortcuts to your key tasks.",
         body: `
           <div class="actions">
-            <button id="student-go-attendance-btn" class="btn btn-primary" type="button">Open Attendance</button>
+            <button id="student-go-schedule-btn" class="btn btn-primary" type="button">My Schedule</button>
+            <button id="student-go-attendance-btn" class="btn btn-outline" type="button">Open Attendance</button>
             <button id="student-go-profile-btn" class="btn btn-outline" type="button">Open Profile</button>
             <button id="student-scroll-checkin-btn" class="btn btn-outline" type="button">Jump to Check-In</button>
             <button id="student-jump-report-form-btn" class="btn btn-outline" type="button" ${absenceChoices.length > 0 ? "" : "disabled"}>Jump to Report Form</button>
@@ -195,8 +211,8 @@ export async function studentOverviewHtml() {
         <div id="checkin-activity" class="grid" style="margin-top:12px;"></div>
         </article>
         <article class="card student-profile-card">
-          <h3>Your Profile</h3>
-          <p class="muted" style="margin:0 0 10px;">Stay on top of your attendance</p>
+          <h3>School portal card</h3>
+          <p class="muted" style="margin:0 0 10px;">Programme, ID, and check-in QR (for attendance sessions use your teacher’s class QR).</p>
           <div class="student-profile-meta">
             <span class="muted">Name</span>
             <strong>${userName}</strong>
@@ -205,8 +221,17 @@ export async function studentOverviewHtml() {
             <span class="muted">Student ID</span>
             <strong>${studentId}</strong>
           </div>
+          ${programLabel ? `<div class="student-profile-meta"><span class="muted">Program</span><strong>${programLabel}</strong></div>` : ""}
+          ${yearLevelLabel ? `<div class="student-profile-meta"><span class="muted">Year level</span><strong>Year ${yearLevelLabel}</strong></div>` : ""}
+          ${classLabel ? `<div class="student-profile-meta"><span class="muted">Class</span><strong>${classLabel}</strong></div>` : ""}
+          ${
+            qrImgSrc
+              ? `<div style="margin-top:10px;text-align:center;"><img src="${qrImgSrc}" width="180" height="180" alt="Student ID QR" style="border-radius:8px;border:1px solid var(--border);" /><p class="muted" style="font-size:11px;margin-top:6px;">Campus ID QR — do not share publicly</p></div>`
+              : ""
+          }
+          ${curriculumRows.length ? `<p class="muted" style="margin-top:10px;font-size:12px;"><strong>This year’s subjects (${curriculumRows.length}):</strong> ${curriculumRows.map((r) => r.subject?.name || r.subject_id).slice(0, 6).join(", ")}${curriculumRows.length > 6 ? "…" : ""}</p>` : ""}
           <div class="student-profile-meta">
-            <span class="muted">Attendance</span>
+            <span class="muted">Attendance rate</span>
             <strong>${rateSafe}%</strong>
           </div>
           <div class="student-progress">
@@ -283,6 +308,10 @@ export async function studentOverviewHtml() {
 }
 
 export function bindStudentActions({ toast }) {
+  document.getElementById("student-go-schedule-btn")?.addEventListener("click", () => {
+    rerenderView("schedule");
+    toast?.("Switched to the Schedule tab.");
+  });
   document.getElementById("student-go-attendance-btn")?.addEventListener("click", () => {
     rerenderView("attendance");
     toast?.("Switched to the Attendance tab.");
@@ -434,6 +463,92 @@ export function bindStudentActions({ toast }) {
     });
   });
 }
+
+const WEEKDAY_NAMES = ["", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+
+export async function studentScheduleHtml() {
+  let schedulePayload = { class: null, slots: [] };
+  let subjects = [];
+  let warn = "";
+  try {
+    const [schedRes, subRes] = await Promise.all([api("/api/student/schedule"), api("/api/student/my-subjects")]);
+    schedulePayload = schedRes?.data || schedulePayload;
+    subjects = listFrom(subRes);
+  } catch (e) {
+    warn = e.message || "Unable to load schedule.";
+  }
+
+  const byDay = {};
+  for (const slot of schedulePayload.slots || []) {
+    const d = Number(slot.day_of_week);
+    if (!byDay[d]) byDay[d] = [];
+    byDay[d].push(slot);
+  }
+  for (const d of Object.keys(byDay)) {
+    byDay[d].sort((a, b) => String(a.start_time).localeCompare(String(b.start_time)));
+  }
+
+  const dayBlocks = [1, 2, 3, 4, 5, 6, 7]
+    .map((d) => {
+      const slots = byDay[d] || [];
+      const lines = slots
+        .map((slot) => {
+          const sub = slot.subject?.name || "Subject";
+          const teacher = slot.teacher?.full_name || slot.teacher?.name || "—";
+          const room = slot.room || "—";
+          const st = String(slot.start_time || "").slice(0, 5);
+          const en = String(slot.end_time || "").slice(0, 5);
+          return `<tr><td>${st}–${en}</td><td>${sub}</td><td>${teacher}</td><td>${room}</td></tr>`;
+        })
+        .join("");
+      return `
+      <article class="card" style="margin-bottom:12px;">
+        <h4 style="margin:0 0 8px;">${WEEKDAY_NAMES[d]}</h4>
+        ${
+          lines
+            ? `<div class="table-wrap"><table><thead><tr><th>Time</th><th>Subject</th><th>Teacher</th><th>Room</th></tr></thead><tbody>${lines}</tbody></table></div>`
+            : '<p class="muted">No classes scheduled.</p>'
+        }
+      </article>`;
+    })
+    .join("");
+
+  const cls = schedulePayload.class;
+
+  return `
+    ${warn ? `<article class="card"><p class="muted">${warn}</p></article>` : ""}
+    ${sectionCard({
+      title: "Your enrolment",
+      subtitle: "Programme, year, and class adviser.",
+      body: cls
+        ? `<p><strong>${cls.class_name || ""}</strong> · Section ${cls.section || "—"} · <strong>Year ${cls.year_level ?? "—"}</strong></p>
+         <p class="muted">Programme: ${cls.program?.name || "—"}</p>
+         <p class="muted">Adviser: ${cls.adviser?.full_name || "—"}</p>`
+        : '<p class="muted">No class assigned. Ask the registrar to assign you to a cohort.</p>',
+    })}
+    ${sectionCard({
+      title: "Weekly timetable",
+      subtitle: "When and where each subject meets (from the school schedule).",
+      body: dayBlocks || '<p class="muted">No slots yet.</p>',
+    })}
+    ${sectionCard({
+      title: "This year’s subject list",
+      subtitle: "From your programme curriculum for your year level.",
+      body: `
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Code</th><th>Subject</th></tr></thead>
+            <tbody>
+              ${subjects.map((r) => `<tr><td class="muted">${r.subject?.code || "-"}</td><td>${r.subject?.name || "-"}</td></tr>`).join("") || '<tr><td colspan="2" class="muted">No curriculum rows.</td></tr>'}
+            </tbody>
+          </table>
+        </div>
+      `,
+    })}
+  `;
+}
+
+export function bindStudentSchedule() {}
 
 export async function studentAttendanceHtml() {
   const today = new Date();
@@ -713,6 +828,7 @@ export function bindStudentProfileActions({ toast } = {}) {
 
 export const studentViews = {
   panel: { html: studentOverviewHtml, bind: bindStudentActions },
+  schedule: { html: studentScheduleHtml, bind: bindStudentSchedule },
   attendance: { html: studentAttendanceHtml, bind: bindStudentAttendanceChart },
   profile: { html: studentProfileHtml, bind: bindStudentProfileActions },
 };

@@ -27,6 +27,8 @@ async function runTeacherAttendanceCsvExport(toast, params) {
   }
 }
 
+const TEACHER_WEEKDAYS = ["", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
 function jumpTo(selector, focusSelector) {
   const target = document.querySelector(selector);
   if (!target) return;
@@ -45,18 +47,21 @@ export async function teacherOverviewHtml() {
   let announcements = [];
   let comments = [];
   let absenceReports = [];
+  let teaching = { subject_assignments: [], timetable_slots: [] };
   let warning = "";
   try {
-    const [classesResp, annsResp, commentsResp, reportsResp] = await Promise.all([
+    const [classesResp, annsResp, commentsResp, reportsResp, teachRes] = await Promise.all([
       api("/api/teacher/classes"),
       api("/api/teacher/announcements"),
       api("/api/teacher/announcement-comments"),
       api("/api/teacher/absence-reports"),
+      api("/api/teacher/my-teaching").catch(() => ({ data: teaching })),
     ]);
     classes = listFrom(classesResp);
     announcements = listFrom(annsResp);
     comments = listFrom(commentsResp);
     absenceReports = listFrom(reportsResp);
+    teaching = teachRes?.data || teaching;
   } catch (err) {
     warning = err.message || "Some teacher dashboard data is unavailable.";
   }
@@ -93,6 +98,31 @@ export async function teacherOverviewHtml() {
     `;
   }).join("");
 
+  const assignRows = (teaching.subject_assignments || [])
+    .slice(0, 16)
+    .map(
+      (a) => `
+    <tr>
+      <td>${a.subject?.name || "-"}</td>
+      <td>${a.school_class?.class_name || "-"}</td>
+      <td>${a.school_class?.program?.name || "—"}</td>
+    </tr>`,
+    )
+    .join("");
+  const slotRows = (teaching.timetable_slots || [])
+    .slice(0, 24)
+    .map(
+      (s) => `
+    <tr>
+      <td>${TEACHER_WEEKDAYS[s.day_of_week] || s.day_of_week}</td>
+      <td>${String(s.start_time || "").slice(0, 5)}–${String(s.end_time || "").slice(0, 5)}</td>
+      <td>${s.subject?.name || "-"}</td>
+      <td>${s.school_class?.class_name || "-"}</td>
+      <td>${s.room || "—"}</td>
+    </tr>`,
+    )
+    .join("");
+
   return `
     ${warning ? `<article class="card"><p class="muted">API Notice: ${warning}</p></article>` : ""}
     <div class="grid stats">
@@ -111,6 +141,31 @@ export async function teacherOverviewHtml() {
             <button id="teacher-go-reports-btn" class="btn btn-outline" type="button">Open Reports</button>
             <button id="teacher-quick-export-btn" class="btn btn-outline" type="button">Quick Export Attendance</button>
             <button id="teacher-jump-session-btn" class="btn btn-outline" type="button">Jump to Session Form</button>
+          </div>
+        `,
+      })}
+      ${sectionCard({
+        title: "My subjects & schedule",
+        subtitle: "Class subject assignments and your weekly timetable slots.",
+        body: `
+          <p class="muted" style="margin-top:0;">You may teach up to three distinct subjects per school year (admin policy).</p>
+          <h4 style="margin:12px 0 8px;">Assignments</h4>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Subject</th><th>Class</th><th>Programme</th></tr></thead>
+              <tbody>
+                ${assignRows || '<tr><td colspan="3" class="muted">No assignment rows.</td></tr>'}
+              </tbody>
+            </table>
+          </div>
+          <h4 style="margin:16px 0 8px;">Timetable</h4>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Day</th><th>Time</th><th>Subject</th><th>Class</th><th>Room</th></tr></thead>
+              <tbody>
+                ${slotRows || '<tr><td colspan="5" class="muted">No timetable rows.</td></tr>'}
+              </tbody>
+            </table>
           </div>
         `,
       })}

@@ -70,6 +70,7 @@ export async function renderRoleDashboard(onLogout) {
       subtitle: "Track announcements and check-in attendance",
       nav: [
         { label: "Home", view: "panel" },
+        { label: "Schedule", view: "schedule" },
         { label: "Attendance", view: "attendance" },
         { label: "Profile", view: "profile" },
       ],

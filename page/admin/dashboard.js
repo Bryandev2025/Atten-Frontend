@@ -248,15 +248,21 @@ export async function adminSettingsHtml() {
   let announcements = [];
   let comments = [];
   let roles = [];
+  let programs = [];
+  let subjects = [];
   try {
-    const [aRes, cRes, roleRes] = await Promise.all([
+    const [aRes, cRes, roleRes, pRes, sRes] = await Promise.all([
       api("/api/admin/announcements"),
       api("/api/admin/announcement-comments"),
       api("/api/roles"),
+      api("/api/admin/programs").catch(() => ({ data: [] })),
+      api("/api/admin/subjects").catch(() => ({ data: [] })),
     ]);
     announcements = listFrom(aRes);
     comments = listFrom(cRes);
     roles = listFrom(roleRes);
+    programs = listFrom(pRes);
+    subjects = listFrom(sRes);
   } catch {
     announcements = [];
     comments = [];
@@ -327,17 +333,56 @@ export async function adminSettingsHtml() {
         </form>
       </article>
     </div>
+    <article class="card">
+      <h3>Academic structure</h3>
+      <p class="muted">Programmes (IT, BSEd Math, BSEd Social Studies) and subjects are seeded; link classes to a programme and assign teachers to each subject.</p>
+      <div class="grid two" style="margin-top:10px;">
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>ID</th><th>Programme</th><th>Years</th></tr></thead>
+            <tbody>
+              ${programs.map((p) => `<tr><td>${p.id}</td><td>${p.name || p.code}</td><td>${p.duration_years || 4}</td></tr>`).join("") || '<tr><td colspan="3" class="muted">No programmes.</td></tr>'}
+            </tbody>
+          </table>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>ID</th><th>Code</th><th>Subject</th></tr></thead>
+            <tbody>
+              ${subjects.slice(0, 18).map((s) => `<tr><td>${s.id}</td><td class="muted">${s.code || "-"}</td><td>${s.name || "-"}</td></tr>`).join("") || '<tr><td colspan="3" class="muted">No subjects.</td></tr>'}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <p class="muted" style="font-size:12px;">Full subject list is truncated; use IDs when assigning teachers.</p>
+    </article>
+    <article class="card">
+      <h3>Assign teacher to class subject</h3>
+      <p class="muted">POST /api/admin/class-subject-teachers — each teacher may teach at most 3 <em>different</em> subjects per school year.</p>
+      <form id="admin-assign-subject-teacher-form" class="grid">
+        <div class="row">
+          <input class="input" name="class_id" type="number" placeholder="Class ID" required />
+          <input class="input" name="subject_id" type="number" placeholder="Subject ID" required />
+          <input class="input" name="teacher_id" type="number" placeholder="Teacher user ID" required />
+        </div>
+        <button class="btn btn-primary" type="submit">Save assignment</button>
+      </form>
+    </article>
     <div class="grid two">
       <article class="card">
         <h3>Create Class</h3>
         <form id="admin-create-class-form" class="grid">
           <div class="row">
             <input class="input" name="school_year_id" type="number" placeholder="School Year ID" required />
-            <input class="input" name="teacher_id" type="number" placeholder="Teacher User ID" required />
+            <input class="input" name="teacher_id" type="number" placeholder="Teacher User ID (adviser)" required />
+          </div>
+          <div class="row">
+            <input class="input" name="program_id" type="number" placeholder="Program ID (optional)" />
+            <input class="input" name="year_level" type="number" placeholder="Year level 1–4 (optional)" min="1" max="4" />
           </div>
           <div class="row">
             <input class="input" name="class_name" placeholder="Class name" required />
-            <input class="input" name="grade_level" placeholder="Grade level" required />
+            <input class="input" name="grade_level" placeholder="Grade level label" required />
           </div>
           <input class="input" name="section" placeholder="Section" required />
           <textarea class="textarea" name="description" placeholder="Description (optional)"></textarea>
@@ -625,21 +670,46 @@ export function bindAdminSettingsActions({ toast } = {}) {
     }
   });
 
+  document.getElementById("admin-assign-subject-teacher-form")?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const data = Object.fromEntries(new FormData(e.currentTarget).entries());
+    setFormSubmitting(e.currentTarget, true, "Saving...");
+    try {
+      await api("/api/admin/class-subject-teachers", {
+        method: "POST",
+        body: JSON.stringify({
+          class_id: Number(data.class_id),
+          subject_id: Number(data.subject_id),
+          teacher_id: Number(data.teacher_id),
+        }),
+      });
+      toast?.("Subject teacher assignment saved successfully.");
+      e.currentTarget.reset();
+    } catch (err) {
+      toast?.(err.message || "Unable to save assignment.", "error");
+    } finally {
+      setFormSubmitting(e.currentTarget, false);
+    }
+  });
+
   document.getElementById("admin-create-class-form")?.addEventListener("submit", async (e) => {
     e.preventDefault();
     const data = Object.fromEntries(new FormData(e.currentTarget).entries());
     setFormSubmitting(e.currentTarget, true, "Creating...");
     try {
+      const payload = {
+        school_year_id: Number(data.school_year_id),
+        teacher_id: Number(data.teacher_id),
+        class_name: data.class_name,
+        grade_level: data.grade_level,
+        section: data.section,
+        description: data.description || null,
+      };
+      if (Number(data.program_id)) payload.program_id = Number(data.program_id);
+      if (Number(data.year_level)) payload.year_level = Number(data.year_level);
       await api("/api/admin/classes", {
         method: "POST",
-        body: JSON.stringify({
-          school_year_id: Number(data.school_year_id),
-          teacher_id: Number(data.teacher_id),
-          class_name: data.class_name,
-          grade_level: data.grade_level,
-          section: data.section,
-          description: data.description || null,
-        }),
+        body: JSON.stringify(payload),
       });
       toast?.("Class created successfully.");
       setUiFlash("admin", { view: "settings", message: "Class created successfully." });

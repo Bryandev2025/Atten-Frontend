@@ -23,6 +23,7 @@ export function dashboardShell({ title, subtitle, name, role, nav }) {
     if (view.includes("setting")) return "settings";
     if (view.includes("announcement")) return "megaphone";
     if (view.includes("attendance") || view.includes("tool")) return "clipboard";
+    if (view.includes("schedule")) return "calendar";
     if (view.includes("profile")) return "user";
     return "dot";
   };
@@ -41,6 +42,9 @@ export function dashboardShell({ title, subtitle, name, role, nav }) {
     }
     if (kind === "clipboard") {
       return `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 3h-2.2a3 3 0 0 0-5.6 0H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a4 4 0 0 1 4-4V5a2 2 0 0 0-2-2zM8 11h8v2H8zm0 4h5v2H8zm3-10a1 1 0 0 1 1 1h-2a1 1 0 0 1 1-1z"/></svg>`;
+    }
+    if (kind === "calendar") {
+      return `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 4h-1V2h-2v2H8V2H6v2H5c-1.11 0-1.99.9-1.99 2L3 20c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 16H5V10h14v10zM9 14H7v-2h2v2zm4 0h-2v-2h2v2zm4 0h-2v-2h2v2zm-8-4H7v-2h2v2zm4 0h-2v-2h2v2zm4 0h-2v-2h2v2z"/></svg>`;
     }
     if (kind === "user") {
       return `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 12a5 5 0 1 0-5-5 5 5 0 0 0 5 5zm0 2c-4.4 0-8 2.2-8 5v1h16v-1c0-2.8-3.6-5-8-5z"/></svg>`;
