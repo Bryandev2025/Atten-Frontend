@@ -69,6 +69,64 @@ registerRoute("/login", () => {
   });
 });
 
+registerRoute("/setup-password", ({ query } = {}) => {
+  const app = document.getElementById("app");
+  const token = String(query?.token || "").trim();
+  app.innerHTML = `
+    <section class="auth-wrap">
+      <div class="auth-card">
+        <form id="setup-password-form" class="auth-form">
+          <div class="auth-form-header">
+            <h2>Set Your Password</h2>
+            <p>Create your account password to activate student login.</p>
+          </div>
+          <div>
+            <label class="label" for="setup-password">Password</label>
+            <input id="setup-password" class="input" name="password" type="password" required minlength="6" placeholder="Minimum 6 characters" />
+          </div>
+          <div>
+            <label class="label" for="setup-password-confirmation">Confirm Password</label>
+            <input id="setup-password-confirmation" class="input" name="password_confirmation" type="password" required minlength="6" placeholder="Repeat password" />
+          </div>
+          <button class="btn btn-primary" type="submit" style="width:100%;">Set Password</button>
+          <button id="setup-password-back-btn" class="btn btn-outline" type="button" style="width:100%;">Back to Sign In</button>
+        </form>
+      </div>
+    </section>
+  `;
+
+  if (!token) {
+    toast("Missing or invalid password setup token.", "error");
+  }
+  document.getElementById("setup-password-back-btn")?.addEventListener("click", () => go("/login"));
+  document.getElementById("setup-password-form")?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    if (!token) return;
+    const form = e.currentTarget;
+    const data = Object.fromEntries(new FormData(form).entries());
+    const submitBtn = form.querySelector('button[type="submit"]');
+    try {
+      submitBtn?.classList.add("is-loading");
+      if (submitBtn) submitBtn.disabled = true;
+      await api("/api/auth/student-invites/accept", {
+        method: "POST",
+        body: JSON.stringify({
+          token,
+          password: data.password,
+          password_confirmation: data.password_confirmation,
+        }),
+      });
+      toast("Password set successfully. You can now sign in.");
+      go("/login");
+    } catch (err) {
+      toast(err.message || "Unable to set password.", "error");
+    } finally {
+      submitBtn?.classList.remove("is-loading");
+      if (submitBtn) submitBtn.disabled = false;
+    }
+  });
+});
+
 registerRoute("/dashboard", async () => {
   if (!guard()) return go("/login");
   await renderRoleDashboard(() => {

@@ -98,6 +98,7 @@ export async function adminOverviewHtml() {
       ${sectionCard({
         title: "Admin Command Center",
         subtitle: "Fast actions for common platform operations.",
+        helpText: "Use these buttons for quick navigation and exports. Start with Reports for approvals, then go to Settings for setup tasks.",
         tools: `
           <button id="admin-refresh-overview-btn" class="btn btn-outline" type="button">Reload</button>
         `,
@@ -113,6 +114,7 @@ export async function adminOverviewHtml() {
       ${sectionCard({
         title: "Moderation Queue Snapshot",
         subtitle: "Latest workload for admin review.",
+        helpText: "This table shows pending review counts. If any row shows Needs Review, open the matching area and resolve items.",
         body: `
           <div class="table-wrap">
             <table>
@@ -130,6 +132,7 @@ export async function adminOverviewHtml() {
     <div class="grid two">
       ${sectionCard({
         title: "Users",
+        helpText: "This table shows recent users. Use the Settings tab for creating or deleting users.",
         tools: `
           <button id="admin-refresh-users-btn" class="btn btn-outline" type="button">Refresh</button>
           <button id="export-users-btn" class="btn btn-outline" type="button">Export CSV</button>
@@ -154,6 +157,7 @@ export async function adminOverviewHtml() {
       })}
       ${sectionCard({
         title: "School Years",
+        helpText: "Set the active school year before class and attendance operations to avoid incorrect records.",
         body: `
         <form id="admin-set-active-year-form" class="row">
           <select class="input" name="school_year_id" required ${schoolYears.length ? "" : "disabled"}>
@@ -181,6 +185,7 @@ export async function adminOverviewHtml() {
     </div>
     ${sectionCard({
       title: "Classes",
+      helpText: "This is a snapshot of created classes and assigned advisers for the active setup.",
       body: `
       <div class="table-wrap">
         <table>
@@ -202,6 +207,7 @@ export async function adminOverviewHtml() {
     ${sectionCard({
       title: "Recent Audit Activity",
       subtitle: "Most recent admin actions captured by the system log.",
+      helpText: "Use this as an activity trail to verify who changed what and when.",
       body: `
       <div class="table-wrap">
         <table>
@@ -329,8 +335,10 @@ export async function adminSettingsHtml() {
   let classes = [];
   let users = [];
   let subjects = [];
+  let schoolYears = [];
+  let studentInvites = [];
   try {
-    const [aRes, cRes, roleRes, pRes, classRes, userRes, sRes] = await Promise.all([
+    const [aRes, cRes, roleRes, pRes, classRes, userRes, sRes, yearsRes, invitesRes] = await Promise.all([
       api("/api/admin/announcements"),
       api("/api/admin/announcement-comments"),
       api("/api/roles"),
@@ -338,6 +346,8 @@ export async function adminSettingsHtml() {
       api("/api/admin/classes").catch(() => ({ data: [] })),
       api("/api/admin/users").catch(() => ({ data: [] })),
       api("/api/admin/subjects").catch(() => ({ data: [] })),
+      api("/api/admin/school-years").catch(() => ({ data: [] })),
+      api("/api/admin/student-invites").catch(() => ({ data: [] })),
     ]);
     announcements = listFrom(aRes);
     comments = listFrom(cRes);
@@ -346,17 +356,167 @@ export async function adminSettingsHtml() {
     classes = listFrom(classRes);
     users = listFrom(userRes);
     subjects = listFrom(sRes);
+    schoolYears = listFrom(yearsRes);
+    studentInvites = listFrom(invitesRes);
   } catch {
     announcements = [];
     comments = [];
     roles = [];
+    schoolYears = [];
   }
   const teachers = users.filter((u) => String(u.role?.name || u.role || "").toLowerCase() === "teacher");
+  const admins = users.filter((u) => String(u.role?.name || u.role || "").toLowerCase() === "admin");
+  const students = users.filter((u) => String(u.role?.name || u.role || "").toLowerCase() === "student");
+  const classNameOptions = [...new Set(classes.map((c) => String(c?.class_name || "").trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  const gradeLevelOptions = [...new Set(classes.map((c) => String(c?.grade_level || "").trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  const sectionOptions = [...new Set(classes.map((c) => String(c?.section || "").trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  const programById = new Map(programs.map((p) => [Number(p.id), p]));
+  const studentPrograms = {
+    bsit: students.filter((u) => {
+      const pid = Number(u?.student_profile?.school_class?.program_id || 0);
+      return String(programById.get(pid)?.code || "").toLowerCase() === "it";
+    }),
+    educSocial: students.filter((u) => {
+      const pid = Number(u?.student_profile?.school_class?.program_id || 0);
+      return String(programById.get(pid)?.code || "").toLowerCase() === "ed_social";
+    }),
+    educMath: students.filter((u) => {
+      const pid = Number(u?.student_profile?.school_class?.program_id || 0);
+      return String(programById.get(pid)?.code || "").toLowerCase() === "ed_math";
+    }),
+    other: students.filter((u) => {
+      const pid = Number(u?.student_profile?.school_class?.program_id || 0);
+      const code = String(programById.get(pid)?.code || "").toLowerCase();
+      return code !== "it" && code !== "ed_social" && code !== "ed_math";
+    }),
+  };
+  const inviteStatusBadge = (status) => {
+    const s = String(status || "").toLowerCase();
+    if (s === "sent" || s === "accepted") return "ok";
+    if (s === "failed" || s === "expired") return "warn";
+    return "";
+  };
   const flash = consumeUiFlash("admin");
   const flashSettings = flash?.view === "settings" ? flash : null;
+  const sortedSubjects = [...subjects].sort((a, b) => String(a?.name || "").localeCompare(String(b?.name || "")));
+  const subjectGroups = {
+    bsit: sortedSubjects.filter((s) => String(s.code || "").toUpperCase().startsWith("IT-")),
+    educMath: sortedSubjects.filter((s) => String(s.code || "").toUpperCase().startsWith("EDM-")),
+    educSocialStudies: sortedSubjects.filter((s) => String(s.code || "").toUpperCase().startsWith("EDS-")),
+    uncategorized: sortedSubjects.filter((s) => {
+      const code = String(s.code || "").toUpperCase();
+      return !(code.startsWith("IT-") || code.startsWith("EDM-") || code.startsWith("EDS-"));
+    }),
+  };
+  const renderSubjectRows = (rows = []) =>
+    rows.map((s) => `
+      <tr>
+        <td>${s.id}</td>
+        <td class="muted">${s.code || "-"}</td>
+        <td>${s.name || "-"}</td>
+        <td style="text-align:right;">
+          <button class="btn btn-outline btn-xs" type="button" data-admin-delete-subject="${s.id}">Delete</button>
+        </td>
+      </tr>
+    `).join("");
+  const renderSubjectTable = (rows = [], emptyMessage = "No subjects in this group.") => `
+    <div class="table-wrap" style="max-height:360px;overflow:auto;">
+      <table>
+        <thead><tr><th>ID</th><th>Code</th><th>Subject</th><th></th></tr></thead>
+        <tbody>
+          ${rows.length ? renderSubjectRows(rows) : `<tr><td colspan="4" class="muted">${emptyMessage}</td></tr>`}
+        </tbody>
+      </table>
+    </div>
+  `;
 
   const userManagementContent = `
     ${flashSettings?.message ? `<article class="card"><p class="badge ok">${flashSettings.message}</p></article>` : ""}
+    <article class="card">
+      <h3>Users by role</h3>
+      <p class="muted">Browse users by role first, then filter students by program.</p>
+      <div data-admin-user-tabs>
+        <div class="actions" style="margin-bottom:8px;gap:6px;flex-wrap:wrap;">
+          <button class="btn btn-outline btn-xs active" type="button" data-admin-user-tab="admin">Admin (${admins.length})</button>
+          <button class="btn btn-outline btn-xs" type="button" data-admin-user-tab="teacher">Teacher (${teachers.length})</button>
+          <button class="btn btn-outline btn-xs" type="button" data-admin-user-tab="student">Student (${students.length})</button>
+        </div>
+        <div data-admin-user-panel="admin">
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>ID</th><th>Name</th><th>Email</th><th>Status</th></tr></thead>
+              <tbody>
+                ${admins.map((u) => `<tr><td>${u.id}</td><td>${u.full_name || "-"}</td><td>${u.email || "-"}</td><td>${u.status || "-"}</td></tr>`).join("") || '<tr><td colspan="4" class="muted">No admin users.</td></tr>'}
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div data-admin-user-panel="teacher" style="display:none;">
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>ID</th><th>Name</th><th>Email</th><th>Status</th></tr></thead>
+              <tbody>
+                ${teachers.map((u) => `<tr><td>${u.id}</td><td>${u.full_name || "-"}</td><td>${u.email || "-"}</td><td>${u.status || "-"}</td></tr>`).join("") || '<tr><td colspan="4" class="muted">No teacher users.</td></tr>'}
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div data-admin-user-panel="student" style="display:none;">
+          <div data-admin-student-program-tabs>
+            <div class="actions" style="margin-bottom:8px;gap:6px;flex-wrap:wrap;">
+              <button class="btn btn-outline btn-xs active" type="button" data-admin-student-program-tab="bsit">BSIT (${studentPrograms.bsit.length})</button>
+              <button class="btn btn-outline btn-xs" type="button" data-admin-student-program-tab="educSocial">EDUC Social Studies (${studentPrograms.educSocial.length})</button>
+              <button class="btn btn-outline btn-xs" type="button" data-admin-student-program-tab="educMath">EDUC Math (${studentPrograms.educMath.length})</button>
+              ${studentPrograms.other.length ? `<button class="btn btn-outline btn-xs" type="button" data-admin-student-program-tab="other">Other (${studentPrograms.other.length})</button>` : ""}
+            </div>
+            <div data-admin-student-program-panel="bsit">
+              <div class="table-wrap">
+                <table>
+                  <thead><tr><th>ID</th><th>Name</th><th>Email</th><th>Class</th></tr></thead>
+                  <tbody>
+                    ${studentPrograms.bsit.map((u) => `<tr><td>${u.id}</td><td>${u.full_name || "-"}</td><td>${u.email || "-"}</td><td>${u.student_profile?.school_class?.class_name || "-"}</td></tr>`).join("") || '<tr><td colspan="4" class="muted">No BSIT students.</td></tr>'}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <div data-admin-student-program-panel="educSocial" style="display:none;">
+              <div class="table-wrap">
+                <table>
+                  <thead><tr><th>ID</th><th>Name</th><th>Email</th><th>Class</th></tr></thead>
+                  <tbody>
+                    ${studentPrograms.educSocial.map((u) => `<tr><td>${u.id}</td><td>${u.full_name || "-"}</td><td>${u.email || "-"}</td><td>${u.student_profile?.school_class?.class_name || "-"}</td></tr>`).join("") || '<tr><td colspan="4" class="muted">No EDUC Social Studies students.</td></tr>'}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <div data-admin-student-program-panel="educMath" style="display:none;">
+              <div class="table-wrap">
+                <table>
+                  <thead><tr><th>ID</th><th>Name</th><th>Email</th><th>Class</th></tr></thead>
+                  <tbody>
+                    ${studentPrograms.educMath.map((u) => `<tr><td>${u.id}</td><td>${u.full_name || "-"}</td><td>${u.email || "-"}</td><td>${u.student_profile?.school_class?.class_name || "-"}</td></tr>`).join("") || '<tr><td colspan="4" class="muted">No EDUC Math students.</td></tr>'}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            ${
+              studentPrograms.other.length
+                ? `<div data-admin-student-program-panel="other" style="display:none;">
+                    <div class="table-wrap">
+                      <table>
+                        <thead><tr><th>ID</th><th>Name</th><th>Email</th><th>Class</th></tr></thead>
+                        <tbody>
+                          ${studentPrograms.other.map((u) => `<tr><td>${u.id}</td><td>${u.full_name || "-"}</td><td>${u.email || "-"}</td><td>${u.student_profile?.school_class?.class_name || "-"}</td></tr>`).join("")}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>`
+                : ""
+            }
+          </div>
+        </div>
+      </div>
+    </article>
     <article class="card">
       <h3>Import Users</h3>
       <p class="muted">Uses POST /api/admin/users-import (CSV/TXT only, Laravel multipart upload)</p>
@@ -368,6 +528,47 @@ export async function adminSettingsHtml() {
       </div>
       <div class="actions" style="margin-top:10px;">
         <button id="admin-users-import-btn" class="btn btn-primary" type="button">Import</button>
+      </div>
+    </article>
+    <article class="card">
+      <h3>Bulk Create Students</h3>
+      <p class="muted">Create many students in one go and automatically send password setup email invites.</p>
+      <form id="admin-bulk-student-form" class="grid">
+        <textarea
+          class="textarea"
+          name="rows"
+          placeholder="Format (CSV or tab-separated):&#10;email,first_name,last_name&#10;juan.cruz@mlgcl.edu,Juan,Cruz&#10;ana.reyes@mlgcl.edu,Ana,Reyes"
+          required
+          style="min-height:170px;"
+        ></textarea>
+        <p class="field-hint">Tip: you may include a header row. Existing student emails are updated and re-invited. New students start as inactive until they set password.</p>
+        <div class="actions">
+          <button class="btn btn-primary" type="submit">Create</button>
+        </div>
+      </form>
+      <div class="table-wrap" style="margin-top:10px;">
+        <table>
+          <thead><tr><th>Student</th><th>Email</th><th>Status</th><th>Expires</th><th></th></tr></thead>
+          <tbody>
+            ${
+              studentInvites.slice(0, 15).map((inv) => `
+                <tr>
+                  <td>${inv.user?.full_name || `${inv.user?.first_name || ""} ${inv.user?.last_name || ""}`.trim() || "-"}</td>
+                  <td>${inv.email || inv.user?.email || "-"}</td>
+                  <td><span class="badge ${inviteStatusBadge(inv.status)}">${inv.status || "-"}</span></td>
+                  <td>${inv.expires_at || "-"}</td>
+                  <td style="text-align:right;">
+                    ${
+                      ["pending", "sent", "failed", "expired"].includes(String(inv.status || "").toLowerCase())
+                        ? `<button class="btn btn-outline btn-xs" type="button" data-admin-resend-student-invite="${inv.id}">Resend invite</button>`
+                        : ""
+                    }
+                  </td>
+                </tr>
+              `).join("") || '<tr><td colspan="5" class="muted">No student invites yet.</td></tr>'
+            }
+          </tbody>
+        </table>
       </div>
     </article>
     <div class="grid two">
@@ -396,7 +597,10 @@ export async function adminSettingsHtml() {
       <article class="card">
         <h3>Delete User</h3>
         <form id="admin-delete-user-form" class="row">
-          <input class="input" name="user_id" type="number" placeholder="User ID" required />
+          <select class="select" name="user_id" required ${users.length ? "" : "disabled"}>
+            <option value="">Select user to delete</option>
+            ${users.map((u) => `<option value="${u.id}">#${u.id} — ${u.full_name || u.email || "User"} (${u.role?.name || u.role || "-"})</option>`).join("")}
+          </select>
           <button class="btn btn-danger" type="submit">Delete</button>
         </form>
       </article>
@@ -420,7 +624,10 @@ export async function adminSettingsHtml() {
       <article class="card">
         <h3>Delete School Year</h3>
         <form id="admin-delete-school-year-form" class="row">
-          <input class="input" name="school_year_id" type="number" placeholder="School Year ID" required />
+          <select class="select" name="school_year_id" required ${schoolYears.length ? "" : "disabled"}>
+            <option value="">Select school year to delete</option>
+            ${schoolYears.map((y) => `<option value="${y.id}">#${y.id} — ${y.name || y.school_year || `SY ${y.id}`}${y.is_active ? " (active)" : ""}</option>`).join("")}
+          </select>
           <button class="btn btn-danger" type="submit">Delete</button>
         </form>
       </article>
@@ -439,6 +646,7 @@ export async function adminSettingsHtml() {
               <input class="input" name="code" placeholder="Code (optional) e.g. MATH101" />
               <input class="input" name="name" placeholder="Subject name" required />
             </div>
+            <p class="field-hint">Use short codes by program: IT- (BSIT), EDM- (EDUC-MATH), EDS- (EDUC-SOCIAL STUDIES).</p>
             <textarea class="textarea" name="description" placeholder="Description (optional)"></textarea>
             <button class="btn btn-primary" type="submit">Save subject</button>
           </form>
@@ -457,22 +665,27 @@ export async function adminSettingsHtml() {
             </tbody>
           </table>
         </div>
-        <div class="table-wrap">
-          <table>
-            <thead><tr><th>ID</th><th>Code</th><th>Subject</th><th></th></tr></thead>
-            <tbody>
-              ${subjects.map((s) => `
-                <tr>
-                  <td>${s.id}</td>
-                  <td class="muted">${s.code || "-"}</td>
-                  <td>${s.name || "-"}</td>
-                  <td style="text-align:right;">
-                    <button class="btn btn-outline btn-xs" type="button" data-admin-delete-subject="${s.id}">Delete</button>
-                  </td>
-                </tr>
-              `).join("") || '<tr><td colspan="4" class="muted">No subjects.</td></tr>'}
-            </tbody>
-          </table>
+        <div data-admin-subject-tabs>
+          <div class="actions" style="margin-bottom:8px;gap:6px;flex-wrap:wrap;">
+            <button class="btn btn-outline btn-xs active" type="button" data-admin-subject-tab="bsit">BSIT</button>
+            <button class="btn btn-outline btn-xs" type="button" data-admin-subject-tab="educMath">EDUC-MATH</button>
+            <button class="btn btn-outline btn-xs" type="button" data-admin-subject-tab="educSocialStudies">EDUC-SOCIAL STUDIES</button>
+            ${subjectGroups.uncategorized.length ? '<button class="btn btn-outline btn-xs" type="button" data-admin-subject-tab="uncategorized">OTHER</button>' : ""}
+          </div>
+          <div data-admin-subject-panel="bsit">
+            ${renderSubjectTable(subjectGroups.bsit, "No BSIT subjects.")}
+          </div>
+          <div data-admin-subject-panel="educMath" style="display:none;">
+            ${renderSubjectTable(subjectGroups.educMath, "No EDUC-MATH subjects.")}
+          </div>
+          <div data-admin-subject-panel="educSocialStudies" style="display:none;">
+            ${renderSubjectTable(subjectGroups.educSocialStudies, "No EDUC-SOCIAL STUDIES subjects.")}
+          </div>
+          ${
+            subjectGroups.uncategorized.length
+              ? `<div data-admin-subject-panel="uncategorized" style="display:none;">${renderSubjectTable(subjectGroups.uncategorized, "No uncategorized subjects.")}</div>`
+              : ""
+          }
         </div>
       </div>
       <p class="muted" style="font-size:12px;">Use Subject IDs when assigning teachers.</p>
@@ -495,6 +708,7 @@ export async function adminSettingsHtml() {
             ${teachers.map((t) => `<option value="${t.id}">#${t.id} — ${t.full_name || t.name || t.email || "Teacher"}</option>`).join("")}
           </select>
         </div>
+        <p class="field-hint">Pick one class, one subject, and one teacher. Use the IDs shown in the tables above if needed.</p>
         <button class="btn btn-primary" type="submit">Save assignment</button>
       </form>
     </article>
@@ -554,18 +768,43 @@ export async function adminSettingsHtml() {
         <h3>Create Class</h3>
         <form id="admin-create-class-form" class="grid">
           <div class="row">
-            <input class="input" name="school_year_id" type="number" placeholder="School Year ID" required />
-            <input class="input" name="teacher_id" type="number" placeholder="Teacher User ID (adviser)" required />
+            <select class="select" name="school_year_id" required ${schoolYears.length ? "" : "disabled"}>
+              <option value="">School Year</option>
+              ${schoolYears.map((y) => `<option value="${y.id}">#${y.id} — ${y.name || y.school_year || `SY ${y.id}`}${y.is_active ? " (active)" : ""}</option>`).join("")}
+            </select>
+            <select class="select" name="teacher_id" required ${teachers.length ? "" : "disabled"}>
+              <option value="">Class Adviser (Teacher)</option>
+              ${teachers.map((t) => `<option value="${t.id}">#${t.id} — ${t.full_name || t.name || t.email || "Teacher"}</option>`).join("")}
+            </select>
+          </div>
+        <p class="field-hint">Pick the school year and class adviser from the lists instead of typing raw IDs.</p>
+          <div class="row">
+            <select class="select" name="program_id">
+              <option value="">Program (optional)</option>
+              ${programs.map((p) => `<option value="${p.id}">#${p.id} — ${p.name || p.code || "Program"}</option>`).join("")}
+            </select>
+            <select class="select" name="year_level">
+              <option value="">Year level (optional)</option>
+              <option value="1">1st Year</option>
+              <option value="2">2nd Year</option>
+              <option value="3">3rd Year</option>
+              <option value="4">4th Year</option>
+            </select>
           </div>
           <div class="row">
-            <input class="input" name="program_id" type="number" placeholder="Program ID (optional)" />
-            <input class="input" name="year_level" type="number" placeholder="Year level 1–4 (optional)" min="1" max="4" />
+            <select class="select" name="class_name" required ${classNameOptions.length ? "" : "disabled"}>
+              <option value="">Class name</option>
+              ${classNameOptions.map((v) => `<option value="${v}">${v}</option>`).join("")}
+            </select>
+            <select class="select" name="grade_level" required ${gradeLevelOptions.length ? "" : "disabled"}>
+              <option value="">Grade level label</option>
+              ${gradeLevelOptions.map((v) => `<option value="${v}">${v}</option>`).join("")}
+            </select>
           </div>
-          <div class="row">
-            <input class="input" name="class_name" placeholder="Class name" required />
-            <input class="input" name="grade_level" placeholder="Grade level label" required />
-          </div>
-          <input class="input" name="section" placeholder="Section" required />
+          <select class="select" name="section" required ${sectionOptions.length ? "" : "disabled"}>
+            <option value="">Section</option>
+            ${sectionOptions.map((v) => `<option value="${v}">${v}</option>`).join("")}
+          </select>
           <textarea class="textarea" name="description" placeholder="Description (optional)"></textarea>
           <button class="btn btn-primary" type="submit">Create Class</button>
         </form>
@@ -573,7 +812,16 @@ export async function adminSettingsHtml() {
       <article class="card">
         <h3>Delete Class</h3>
         <form id="admin-delete-class-form" class="row">
-          <input class="input" name="class_id" type="number" placeholder="Class ID" required />
+          <select class="select" name="class_id" required ${classes.length ? "" : "disabled"}>
+            <option value="">Select class to delete</option>
+            ${
+              classes.map((c) => `
+                <option value="${c.id}">
+                  #${c.id} — ${c.class_name || c.section || "Class"} (${c.school_year?.name || "SY"})${c.teacher?.full_name ? ` — Adviser: ${c.teacher.full_name}` : ""}
+                </option>
+              `).join("")
+            }
+          </select>
           <button class="btn btn-danger" type="submit">Delete</button>
         </form>
       </article>
@@ -959,6 +1207,54 @@ export function bindAdminSettingsActions({ toast } = {}) {
     };
     buttons.forEach((btn) => btn.addEventListener("click", () => activate(btn.getAttribute("data-feature-tab"))));
   });
+  document.querySelectorAll("[data-admin-subject-tabs]").forEach((root) => {
+    const tabButtons = Array.from(root.querySelectorAll("[data-admin-subject-tab]"));
+    const tabPanels = Array.from(root.querySelectorAll("[data-admin-subject-panel]"));
+    const activateSubjectTab = (key) => {
+      tabButtons.forEach((btn) => {
+        const on = btn.getAttribute("data-admin-subject-tab") === key;
+        btn.classList.toggle("active", on);
+      });
+      tabPanels.forEach((panel) => {
+        panel.style.display = panel.getAttribute("data-admin-subject-panel") === key ? "" : "none";
+      });
+    };
+    tabButtons.forEach((btn) => {
+      btn.addEventListener("click", () => activateSubjectTab(btn.getAttribute("data-admin-subject-tab")));
+    });
+  });
+  document.querySelectorAll("[data-admin-user-tabs]").forEach((root) => {
+    const tabButtons = Array.from(root.querySelectorAll("[data-admin-user-tab]"));
+    const tabPanels = Array.from(root.querySelectorAll("[data-admin-user-panel]"));
+    const activateUserTab = (key) => {
+      tabButtons.forEach((btn) => {
+        const on = btn.getAttribute("data-admin-user-tab") === key;
+        btn.classList.toggle("active", on);
+      });
+      tabPanels.forEach((panel) => {
+        panel.style.display = panel.getAttribute("data-admin-user-panel") === key ? "" : "none";
+      });
+    };
+    tabButtons.forEach((btn) => {
+      btn.addEventListener("click", () => activateUserTab(btn.getAttribute("data-admin-user-tab")));
+    });
+  });
+  document.querySelectorAll("[data-admin-student-program-tabs]").forEach((root) => {
+    const tabButtons = Array.from(root.querySelectorAll("[data-admin-student-program-tab]"));
+    const tabPanels = Array.from(root.querySelectorAll("[data-admin-student-program-panel]"));
+    const activateProgramTab = (key) => {
+      tabButtons.forEach((btn) => {
+        const on = btn.getAttribute("data-admin-student-program-tab") === key;
+        btn.classList.toggle("active", on);
+      });
+      tabPanels.forEach((panel) => {
+        panel.style.display = panel.getAttribute("data-admin-student-program-panel") === key ? "" : "none";
+      });
+    };
+    tabButtons.forEach((btn) => {
+      btn.addEventListener("click", () => activateProgramTab(btn.getAttribute("data-admin-student-program-tab")));
+    });
+  });
 
   const importFileInput = document.getElementById("admin-users-import-file");
   const importFileName = document.getElementById("admin-users-import-name");
@@ -997,6 +1293,85 @@ export function bindAdminSettingsActions({ toast } = {}) {
     } catch (err) {
       toast?.(err.message || "Unable to import users.", "error");
     }
+  });
+  document.getElementById("admin-bulk-student-form")?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const form = e.currentTarget;
+    const data = Object.fromEntries(new FormData(form).entries());
+    const rawRows = String(data.rows || "").trim();
+    if (!rawRows) return toast?.("Paste at least one student line.", "error");
+
+    const lines = rawRows
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean);
+    if (!lines.length) return toast?.("No valid student lines found.", "error");
+    const separators = [",", "\t", "|"];
+    const pickParts = (line) => {
+      for (const sep of separators) {
+        const p = line.split(sep).map((s) => s.trim());
+        if (p.length >= 3) return p;
+      }
+      return [line];
+    };
+    const maybeHeader = pickParts(lines[0]).map((s) => s.toLowerCase());
+    const hasHeader = maybeHeader.includes("email") && maybeHeader.includes("first_name");
+    const dataLines = hasHeader ? lines.slice(1) : lines;
+    if (!dataLines.length) return toast?.("No student rows found after header.", "error");
+
+    const rowErrors = [];
+    const rows = [];
+    dataLines.forEach((line, idx) => {
+      const parts = pickParts(line);
+      const [email = "", firstName = "", lastName = ""] = parts;
+      if (!email || !firstName || !lastName) {
+        rowErrors.push(`Line ${idx + 1} is incomplete.`);
+        return;
+      }
+      rows.push({
+        email,
+        first_name: firstName,
+        last_name: lastName,
+      });
+    });
+    if (rowErrors.length) {
+      toast?.(rowErrors.slice(0, 3).join(" ") + (rowErrors.length > 3 ? " ..." : ""), "error");
+      return;
+    }
+
+    setFormSubmitting(form, true, "Creating...");
+    try {
+      const res = await api("/api/admin/student-invites/bulk-create", {
+        method: "POST",
+        body: JSON.stringify({ rows }),
+      });
+      const created = Number(res?.created || 0);
+      const updated = Number(res?.updated || 0);
+      const sent = Number(res?.invites_sent || 0);
+      const failures = Number(res?.invite_failures || 0);
+      const errors = Array.isArray(res?.errors) ? res.errors.length : 0;
+      toast?.(`Created: ${created}, Updated: ${updated}, Sent: ${sent}, Failed: ${failures}, Errors: ${errors}.`);
+      setUiFlash("admin", { view: "settings", message: `Bulk student creation finished. Invites sent: ${sent}, failed: ${failures}.` });
+      rerenderView("settings");
+    } catch (err) {
+      toast?.(err.message || "Unable to bulk create students.", "error");
+    } finally {
+      setFormSubmitting(form, false);
+    }
+  });
+  document.querySelectorAll("[data-admin-resend-student-invite]")?.forEach((btn) => {
+    btn.addEventListener("click", async (e) => {
+      const inviteId = Number(e.currentTarget?.getAttribute("data-admin-resend-student-invite"));
+      if (!inviteId) return;
+      try {
+        await api(`/api/admin/student-invites/${inviteId}/resend`, { method: "POST" });
+        toast?.("Student invite resent.");
+        setUiFlash("admin", { view: "settings", message: "Student invite resent." });
+        rerenderView("settings");
+      } catch (err) {
+        toast?.(err.message || "Unable to resend invite.", "error");
+      }
+    });
   });
 
   document.getElementById("admin-create-user-form")?.addEventListener("submit", async (e) => {

@@ -156,6 +156,7 @@ export async function teacherOverviewHtml() {
       ${sectionCard({
         title: "Teacher Command Center",
         subtitle: "Quick navigation and exports.",
+        helpText: "Use these shortcuts for your daily flow: announcements, reports, export, and jump-to forms.",
         body: `
           <div class="actions">
             <button id="teacher-go-announcements-btn" class="btn btn-primary" type="button">Manage Announcements</button>
@@ -168,6 +169,7 @@ export async function teacherOverviewHtml() {
       ${sectionCard({
         title: "My subjects & schedule",
         subtitle: "Class subject assignments and your weekly timetable slots.",
+        helpText: "This panel lists your assigned subjects and teaching schedule. If empty, ask admin to assign class-subject mappings.",
         body: `
           <p class="muted" style="margin-top:0;">You may teach up to three distinct subjects per school year (admin policy).</p>
           <h4 style="margin:12px 0 8px;">Assignments</h4>
@@ -193,6 +195,7 @@ export async function teacherOverviewHtml() {
       ${sectionCard({
         title: "Class Snapshot",
         subtitle: "Recent classes currently assigned to you.",
+        helpText: "These are your currently assigned classes. Use class IDs here when creating sessions and announcements.",
         body: `
           <div class="table-wrap">
             <table>
@@ -217,6 +220,7 @@ export async function teacherOverviewHtml() {
     ${sectionCard({
       title: "Per-Class Breakdown",
       subtitle: "Quick summary of class communication workload.",
+      helpText: "Shows announcement and draft load per class to help prioritize what to publish first.",
       body: `
         <div class="grid two">
           ${classCards || '<article class="card"><p class="muted">No classes available for breakdown.</p></article>'}
@@ -229,6 +233,7 @@ export async function teacherOverviewHtml() {
     ${sectionCard({
       title: "Recent Activity Timeline",
       subtitle: "Latest teacher-side events from reports and announcements.",
+      helpText: "A recent timeline of announcement/report activity so you can quickly spot pending tasks.",
       body: `
         <div class="table-wrap">
           <table>
@@ -253,12 +258,14 @@ export async function teacherOverviewHtml() {
     <div class="grid two">
       ${sectionCard({
         title: "Open Attendance Session",
+        helpText: "Create a live attendance window for a class. Share the session QR with students for check-in.",
         body: `
         <form id="open-session-form" class="grid">
           <div class="row">
             <input class="input" name="class_id" type="number" placeholder="Class ID" required />
             <input class="input" name="school_year_id" type="number" placeholder="School Year ID" required />
           </div>
+          <p class="field-hint">Use the class and school year IDs assigned to you by admin.</p>
           <div class="row">
             <input class="input" name="attendance_date" type="date" required />
             <input class="input" name="duration_minutes" type="number" placeholder="Duration (minutes)" required />
@@ -270,12 +277,14 @@ export async function teacherOverviewHtml() {
       })}
       ${sectionCard({
         title: "Manual Attendance Mark",
+        helpText: "Use this when a student cannot check in by QR. Enter one student record at a time.",
         body: `
         <form id="teacher-mark-attendance-form" class="grid">
           <div class="row">
             <input class="input" name="student_id" type="number" placeholder="Student ID" required />
             <input class="input" name="class_id" type="number" placeholder="Class ID" required />
           </div>
+          <p class="field-hint">Student ID must belong to the selected class.</p>
           <div class="row">
             <input class="input" name="school_year_id" type="number" placeholder="School Year ID" required />
             <input class="input" name="attendance_date" type="date" required />
@@ -292,9 +301,11 @@ export async function teacherOverviewHtml() {
       })}
       ${sectionCard({
         title: "Create Announcement",
+        helpText: "Draft announcements for a specific class. Publish later from the announcements tab.",
         body: `
         <form id="announce-form" class="grid">
           <input class="input" name="class_id" type="number" placeholder="Class ID" required />
+          <p class="field-hint">This announcement will be visible to students in the selected class.</p>
           <input class="input" name="title" placeholder="Title" required />
           <textarea class="textarea" name="body" placeholder="Body" required></textarea>
           <button class="btn btn-primary" type="submit">Create Draft</button>
@@ -305,6 +316,7 @@ export async function teacherOverviewHtml() {
     </div>
     ${sectionCard({
       title: "Export",
+      helpText: "Downloads attendance data as CSV for your selected/default date range.",
       tools: `<button id="export-att-btn" class="btn btn-outline">Export Attendance CSV</button>`,
       body: `<p class="muted">Uses default query: class_id=1, current month range.</p>`,
     })}
@@ -655,6 +667,7 @@ export async function teacherAnnouncementsHtml() {
   const createContent = `
     ${sectionCard({
       title: "Create Announcement",
+      helpText: "Create a class announcement draft. Drafts are visible to you until published.",
       body: `
       ${flash?.message ? `<p class="badge ok" style="margin-bottom:8px;">${flash.message}</p>` : ""}
       <form id="announce-form" class="grid">
@@ -671,6 +684,7 @@ export async function teacherAnnouncementsHtml() {
   const announcementsContent = `
     ${sectionCard({
       title: "Announcement Actions",
+      helpText: "Publish or delete existing announcements and review their statuses.",
       body: `
         <form id="teacher-publish-announcement-form" class="row">
           <select class="input" name="announcement_id" required ${announcements.length ? "" : "disabled"}>
@@ -701,6 +715,7 @@ export async function teacherAnnouncementsHtml() {
   const moderationContent = `
     ${sectionCard({
       title: "Comment Moderation",
+      helpText: "Hide, unhide, or delete announcement comments to keep class discussions appropriate.",
       body: `
         <form id="teacher-comment-action-form" class="grid">
           <div class="row">
@@ -730,6 +745,7 @@ export async function teacherAnnouncementsHtml() {
   const absenceContent = `
     ${sectionCard({
       title: "Absence Review",
+      helpText: "Approve or reject student absence reports after validating reasons and attachments.",
       body: `
       <form id="teacher-absence-action-form" class="row">
         <select class="input" name="absence_report_id" required ${absenceReports.length ? "" : "disabled"}>

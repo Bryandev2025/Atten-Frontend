@@ -4,8 +4,8 @@ export function renderAuthShell() {
       <div class="auth-card">
         <form id="login-form" class="auth-form">
           <div class="auth-form-header">
-            <h2>Sign in</h2>
-            <p>Student Absence Report System — use your school credentials.</p>
+            <h2>MLGCL Portal Sign In</h2>
+            <p>Welcome to MLGCL. Use your school account to continue.</p>
           </div>
           <div>
             <label class="label" for="login-email">Email</label>
@@ -22,7 +22,7 @@ export function renderAuthShell() {
   `;
 }
 
-export function dashboardShell({ title, subtitle, name, role, nav }) {
+export function dashboardShell({ title, subtitle, name, role, nav, quickStartTitle = "", quickStartItems = [] }) {
   const initials = String(name)
     .split(" ")
     .filter(Boolean)
@@ -85,6 +85,16 @@ export function dashboardShell({ title, subtitle, name, role, nav }) {
     </button>`,
     )
     .join("");
+  const quickStartHtml = quickStartItems.length
+    ? `
+      <article class="card" style="margin-top:12px;">
+        <h3 style="margin:0 0 8px;">${quickStartTitle || "Quick Start"}</h3>
+        <div class="actions" style="gap:8px;flex-wrap:wrap;">
+          ${quickStartItems.map((item) => `<span class="badge">${item}</span>`).join("")}
+        </div>
+      </article>
+    `
+    : "";
 
   return `
     <div class="app-shell">
@@ -92,9 +102,9 @@ export function dashboardShell({ title, subtitle, name, role, nav }) {
         <header class="app-header">
           <div class="app-header-left">
             <div class="app-brand">
-              <span class="app-brand-mark" aria-hidden="true"></span>
+              <img class="app-brand-logo" src="./assets/img/mlgcl-logo.svg" alt="MLGCL logo" />
               <div>
-                <div class="app-brand-title">Absence &amp; Attendance</div>
+                <div class="app-brand-title">MLGCL</div>
                 <div class="app-brand-role">${roleLabel}</div>
               </div>
             </div>
@@ -105,6 +115,8 @@ export function dashboardShell({ title, subtitle, name, role, nav }) {
             </div>
           </div>
           <div class="app-header-actions">
+            <button id="help-btn" class="btn btn-outline" type="button" aria-haspopup="dialog" aria-controls="help-modal">Need Help?</button>
+            <button id="help-reset-btn" class="btn btn-outline" type="button">Reset Help Tips</button>
             <button id="theme-toggle-btn" class="btn btn-outline" type="button" aria-label="Toggle light or dark theme">Theme</button>
             <span class="user-chip">
               <span class="avatar" aria-hidden="true">${initials}</span>
@@ -116,20 +128,44 @@ export function dashboardShell({ title, subtitle, name, role, nav }) {
         <nav class="app-tabs" role="tablist" aria-label="Main sections">
           ${tabButtons}
         </nav>
+        ${quickStartHtml}
+        <div id="help-modal" class="help-modal" role="dialog" aria-modal="true" aria-labelledby="help-modal-title" hidden>
+          <div class="help-modal-backdrop" data-help-close="true"></div>
+          <article class="help-modal-card">
+            <div class="panel-header" style="margin-bottom:10px;">
+              <h3 id="help-modal-title" class="panel-title">Portal Guide</h3>
+              <button id="help-close-btn" class="btn btn-outline btn-xs" type="button">Close</button>
+            </div>
+            <div id="help-modal-content" class="help-modal-content"></div>
+            <label class="help-modal-footer">
+              <input id="help-dont-show-checkbox" type="checkbox" />
+              <span>Don’t show this guide automatically next time</span>
+            </label>
+          </article>
+        </div>
         <div id="view-root" class="app-view" role="tabpanel" tabindex="0"></div>
       </div>
     </div>
   `;
 }
 
-export function panelHeader(title, subtitle = "", toolsHtml = "") {
+export function panelHeader(title, subtitle = "", toolsHtml = "", helpTitle = "", helpText = "") {
+  const helpButton = helpText
+    ? `<button
+        type="button"
+        class="btn btn-outline btn-xs section-help-btn"
+        data-help-title="${String(helpTitle || title).replace(/"/g, "&quot;")}"
+        data-help-text="${String(helpText).replace(/"/g, "&quot;")}"
+        aria-label="Open help for ${String(title).replace(/"/g, "&quot;")}"
+      >?</button>`
+    : "";
   return `
     <div class="panel-header">
       <div>
         <h3 class="panel-title">${title}</h3>
         ${subtitle ? `<p class="panel-subtitle">${subtitle}</p>` : ""}
       </div>
-      ${toolsHtml ? `<div class="panel-tools">${toolsHtml}</div>` : ""}
+      ${toolsHtml || helpButton ? `<div class="panel-tools">${helpButton}${toolsHtml}</div>` : ""}
     </div>
   `;
 }
@@ -150,10 +186,10 @@ export function statCards(items = []) {
   `;
 }
 
-export function sectionCard({ title, subtitle = "", body = "", tools = "" }) {
+export function sectionCard({ title, subtitle = "", body = "", tools = "", helpTitle = "", helpText = "" }) {
   return `
     <article class="card">
-      ${panelHeader(title, subtitle, tools)}
+      ${panelHeader(title, subtitle, tools, helpTitle, helpText)}
       ${body}
     </article>
   `;

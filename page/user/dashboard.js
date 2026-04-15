@@ -143,6 +143,7 @@ export async function studentOverviewHtml() {
       ${sectionCard({
         title: "Student Command Center",
         subtitle: "Quick shortcuts to your key tasks.",
+        helpText: "Use these shortcuts to quickly open schedule, attendance, profile, or jump directly to check-in/report forms.",
         body: `
           <div class="actions">
             <button id="student-go-schedule-btn" class="btn btn-primary" type="button">My Schedule</button>
@@ -156,6 +157,7 @@ export async function studentOverviewHtml() {
       ${sectionCard({
         title: "My Summary",
         subtitle: "Current status from your records.",
+        helpText: "This table gives your current attendance and announcement status so you can see what needs action.",
         body: `
           <div class="table-wrap">
             <table>
@@ -175,6 +177,7 @@ export async function studentOverviewHtml() {
       ${sectionCard({
         title: "Attendance Streak",
         subtitle: "Consecutive days with present/late attendance records.",
+        helpText: "Streak counts consecutive present/late days. Missing days or absences reset the streak.",
         body: `
           <div class="actions" style="justify-content:space-between;">
             <span class="badge ${streakDays >= 5 ? "ok" : "warn"}">${streakDays} day streak</span>
@@ -188,6 +191,7 @@ export async function studentOverviewHtml() {
       ${sectionCard({
         title: "Attendance Trends",
         subtitle: "Quick behavior trend from your records.",
+        helpText: "Use this trend to monitor present, late, and absent counts over recent records.",
         body: `
           <div class="table-wrap">
             <table>
@@ -205,6 +209,7 @@ export async function studentOverviewHtml() {
     ${sectionCard({
       title: "Tasks Due",
       subtitle: "Items you should handle today.",
+      helpText: "Buttons are enabled only when action is needed (unread announcements or pending absence tasks).",
       body: `
         <div class="actions">
           <button id="student-task-unread-btn" class="btn ${unreadAnnouncements > 0 ? "btn-primary" : "btn-outline"}" type="button" ${unreadAnnouncements > 0 ? "" : "disabled"}>Unread Announcements: ${unreadAnnouncements}</button>
@@ -271,6 +276,7 @@ export async function studentOverviewHtml() {
       ${sectionCard({
         title: "Announcements",
         subtitle: warning ? `API Notice: ${warning}` : "",
+        helpText: "Read class announcements regularly. Unread announcements may include deadlines or class updates.",
         body: `
         <div class="table-wrap">
           <table>
@@ -290,6 +296,7 @@ export async function studentOverviewHtml() {
       })}
       ${sectionCard({
         title: "Absence Reports",
+        helpText: "Submit one report per absent attendance record. Include a clear reason and optional attachment.",
         body: `
           ${flashPanel?.message ? `<p class="badge ok" style="margin-bottom:8px;">${flashPanel.message}</p>` : ""}
           <form id="student-create-report-form" class="grid">
@@ -576,6 +583,7 @@ export async function studentScheduleHtml() {
     ${sectionCard({
       title: "Your enrolment",
       subtitle: "Programme, year, and class adviser.",
+      helpText: "This section shows your assigned class and programme. Contact admin if class assignment is missing.",
       body: cls
         ? `<p><strong>${cls.class_name || ""}</strong> · Section ${cls.section || "—"} · <strong>Year ${cls.year_level ?? "—"}</strong></p>
          <p class="muted">Programme: ${cls.program?.name || "—"}</p>
@@ -585,11 +593,13 @@ export async function studentScheduleHtml() {
     ${sectionCard({
       title: "Weekly timetable",
       subtitle: "When and where each subject meets (from the school schedule).",
+      helpText: "Your weekly class schedule grouped by day. Check room and time before attending.",
       body: dayBlocks || '<p class="muted">No slots yet.</p>',
     })}
     ${sectionCard({
       title: "This year’s subject list",
       subtitle: "From your programme curriculum for your year level.",
+      helpText: "Official subjects for your programme/year level. Use this as your subject checklist.",
       body: `
         <div class="table-wrap">
           <table>
@@ -616,6 +626,7 @@ export async function studentAttendanceHtml() {
     ${sectionCard({
       title: "Attendance Trend",
       subtitle: "Powered by /api/student/dashboard-stats",
+      helpText: "Filter by month range to view attendance chart and recent attendance records.",
       body: `
       <div class="row" style="margin-bottom:12px;">
         <input id="student-filter-from" class="input" type="month" value="${from.slice(0, 7)}" />
@@ -742,6 +753,7 @@ export async function studentProfileHtml() {
   const readContent = `
     ${sectionCard({
       title: "Mark as Read",
+      helpText: "Select an announcement you have finished reading so your unread count stays accurate.",
       body: `
       ${flashProfile?.message ? `<p class="badge ok" style="margin-bottom:8px;">${flashProfile.message}</p>` : ""}
       <form id="student-mark-read-form" class="row">
@@ -758,6 +770,7 @@ export async function studentProfileHtml() {
   const commentsContent = `
     ${sectionCard({
       title: "Comment Actions",
+      helpText: "Add, edit, or delete your comments on announcements.",
       body: `
       <form id="student-comment-form" class="grid" style="margin-top:12px;">
         <div class="row">
@@ -794,6 +807,7 @@ export async function studentProfileHtml() {
   const logsContent = `
     ${sectionCard({
       title: "Interaction Logs",
+      helpText: "A recent log of announcements and comments for quick review.",
       body: `
       <div class="table-wrap" style="margin-top:12px;">
         <table>

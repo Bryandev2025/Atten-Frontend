@@ -171,12 +171,12 @@ body {
   flex-shrink: 0;
 }
 
-.app-brand-mark {
-  width: 36px;
-  height: 36px;
-  border-radius: 10px;
-  background: var(--brand-gradient);
-  box-shadow: 0 2px 8px rgba(79, 70, 229, 0.35);
+.app-brand-logo {
+  width: 44px;
+  height: 44px;
+  object-fit: contain;
+  border-radius: 8px;
+  flex-shrink: 0;
 }
 
 .app-brand-title {
@@ -1008,6 +1008,56 @@ tbody tr:hover {
   animation: jump-highlight-pulse 1s ease;
   box-shadow: 0 0 0 3px var(--ring);
   border-radius: var(--radius-sm);
+}
+
+.field-hint {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.help-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+}
+
+.help-modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+}
+
+[data-theme="dark"] .help-modal-backdrop {
+  background: rgba(0, 0, 0, 0.6);
+}
+
+.help-modal-card {
+  position: relative;
+  width: min(700px, calc(100vw - 32px));
+  max-height: calc(100vh - 48px);
+  margin: 24px auto;
+  overflow: auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  padding: 18px;
+}
+
+.help-modal-content h4 {
+  margin: 0;
+}
+
+.help-modal-footer {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-secondary);
 }
 
 @keyframes spin {
