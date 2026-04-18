@@ -1,4 +1,4 @@
-import { api, config, getSession } from "../../assets/core/api.js";
+import { api, config, fetchAuthenticatedBlobUrl, getSession } from "../../assets/core/api.js";
 import { renderBarChart } from "../../assets/components/chart.js";
 import { consumeUiFlash, rerenderView, setFormSubmitting, setInlineHint, setUiFlash } from "../../assets/components/form-ui.js";
 import { sectionCard } from "../../assets/components/ui.js";
@@ -15,7 +15,7 @@ function featureTabsHtml({ idPrefix, tabs }) {
   const nav = tabs
     .map(
       (tab, index) => `
-      <button type="button" class="feature-tab-btn ${index === 0 ? "active" : ""}" data-feature-tab="${idPrefix}:${tab.id}" aria-selected="${index === 0 ? "true" : "false"}" role="tab">${tab.label}</button>
+      <button type="button" class="side-tabs-btn ${index === 0 ? "active" : ""}" data-feature-tab="${idPrefix}:${tab.id}" aria-selected="${index === 0 ? "true" : "false"}" role="tab">${tab.label}</button>
     `,
     )
     .join("");
@@ -29,9 +29,9 @@ function featureTabsHtml({ idPrefix, tabs }) {
     )
     .join("");
   return `
-    <div class="feature-tabs" data-feature-tabs="${idPrefix}">
-      <nav class="feature-tab-nav" role="tablist">${nav}</nav>
-      <div class="feature-tab-content">${panels}</div>
+    <div class="side-tabs-layout" data-feature-tabs="${idPrefix}">
+      <nav class="side-tabs-nav" role="tablist">${nav}</nav>
+      <div class="side-tabs-panels feature-tab-content">${panels}</div>
     </div>
   `;
 }
@@ -125,9 +125,6 @@ export async function studentOverviewHtml() {
   const classLabel = qrCard?.class_name
     ? `${qrCard.class_name}${qrCard.section ? ` — Sec ${qrCard.section}` : ""}`
     : user.studentProfile?.schoolClass?.class_name || "";
-  const qrImgSrc = qrCard?.qr_payload
-    ? `https://quickchart.io/qr?size=180&text=${encodeURIComponent(qrCard.qr_payload)}`
-    : "";
   const attendanceRate = Number(attendanceSummary?.attendance_rate || 0);
   const rateSafe = Number.isFinite(attendanceRate) ? Math.max(0, Math.min(100, attendanceRate)) : 0;
   const pendingReports = reports.filter((r) => String(r.status || "").toLowerCase() === "pending").length;
@@ -251,8 +248,11 @@ export async function studentOverviewHtml() {
         ${yearLevelLabel ? `<div class="student-profile-meta"><span class="muted">Year level</span><strong>Year ${yearLevelLabel}</strong></div>` : ""}
         ${classLabel ? `<div class="student-profile-meta"><span class="muted">Class</span><strong>${classLabel}</strong></div>` : ""}
         ${
-          qrImgSrc
-            ? `<div style="margin-top:10px;text-align:center;"><img src="${qrImgSrc}" width="180" height="180" alt="Student ID QR" style="border-radius:8px;border:1px solid var(--border);" /><p class="muted" style="font-size:11px;margin-top:6px;">Campus ID QR — do not share publicly</p></div>`
+          qrCard?.qr_payload
+            ? `<div id="student-portal-qr-host" data-needs-qr="true" style="margin-top:10px;text-align:center;">
+                <p class="muted" style="font-size:12px;">Loading campus ID QR…</p>
+              </div>
+              <p class="muted" style="font-size:11px;margin-top:6px;">Campus ID QR — do not share publicly (rendered by your API; not sent to third parties).</p>`
             : ""
         }
         ${curriculumRows.length ? `<p class="muted" style="margin-top:10px;font-size:12px;"><strong>This year’s subjects (${curriculumRows.length}):</strong> ${curriculumRows.map((r) => r.subject?.name || r.subject_id).slice(0, 6).join(", ")}${curriculumRows.length > 6 ? "…" : ""}</p>` : ""}
@@ -355,6 +355,29 @@ export async function studentOverviewHtml() {
 }
 
 export function bindStudentActions({ toast }) {
+  const qrHost = document.getElementById("student-portal-qr-host");
+  if (qrHost?.dataset.needsQr === "true") {
+    (async () => {
+      try {
+        const blob = await fetchAuthenticatedBlobUrl("/api/student/qr-image?size=180", { accept: "image/png" });
+        const url = URL.createObjectURL(blob);
+        qrHost.innerHTML = "";
+        const img = document.createElement("img");
+        img.src = url;
+        img.width = 180;
+        img.height = 180;
+        img.alt = "Student ID QR";
+        img.style.borderRadius = "8px";
+        img.style.border = "1px solid var(--border)";
+        img.addEventListener("load", () => URL.revokeObjectURL(url), { once: true });
+        qrHost.appendChild(img);
+      } catch {
+        qrHost.innerHTML =
+          '<p class="muted" style="font-size:12px;">Could not load QR image. Confirm you are signed in and the API is reachable.</p>';
+      }
+    })();
+  }
+
   document.querySelectorAll("[data-feature-tabs='student-overview']").forEach((root) => {
     const buttons = Array.from(root.querySelectorAll("[data-feature-tab]"));
     const panels = Array.from(root.querySelectorAll("[data-feature-panel]"));

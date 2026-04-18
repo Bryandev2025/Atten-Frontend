@@ -48,19 +48,15 @@ export async function renderRoleDashboard(onLogout) {
 
   const roleMap = {
     admin: {
-      title: "Admin MLGCL Portal",
-      subtitle: "Manage users, academics, reports, and school operations",
+      title: "Admin",
+      subtitle: "Overview, reports, and school setup",
       nav: [
-        { label: "Dashboard", view: "overview" },
-        { label: "School Reports", view: "reports" },
-        { label: "Portal Setup", view: "settings" },
+        { label: "Overview", view: "overview" },
+        { label: "Reports", view: "reports" },
+        { label: "Setup", view: "settings" },
       ],
-      quickStartTitle: "Admin Quick Start",
-      quickStartItems: [
-        "1) Open Portal Setup to manage school data",
-        "2) Add subjects, classes, and assignments",
-        "3) Review absence reports daily",
-      ],
+      quickStartTitle: "",
+      quickStartItems: [],
       views: adminViews,
     },
     teacher: {

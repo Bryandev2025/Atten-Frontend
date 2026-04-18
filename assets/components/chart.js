@@ -17,8 +17,8 @@ export function renderBarChart({ id, labels, values, label }) {
 
   // Create gradient
   const gradient = ctx.createLinearGradient(0, 0, 0, 400);
-  gradient.addColorStop(0, "rgba(99, 102, 241, 0.9)");
-  gradient.addColorStop(1, "rgba(139, 92, 246, 0.6)");
+  gradient.addColorStop(0, "rgba(13, 148, 136, 0.95)");
+  gradient.addColorStop(1, "rgba(20, 184, 166, 0.55)");
 
   const textColor = window.getComputedStyle(document.body).getPropertyValue('--muted') || "#94a3b8";
   const gridColor = window.getComputedStyle(document.body).getPropertyValue('--border-light') || "rgba(255,255,255,0.05)";
@@ -32,26 +32,26 @@ export function renderBarChart({ id, labels, values, label }) {
         data: values,
         borderRadius: 8,
         backgroundColor: gradient,
-        hoverBackgroundColor: "rgba(99, 102, 241, 1)",
+        hoverBackgroundColor: "rgba(13, 148, 136, 1)",
       }],
     },
     options: {
       responsive: true,
       maintainAspectRatio: false,
       plugins: { 
-        legend: { labels: { color: textColor, font: { family: 'Inter', weight: 600 } } },
+        legend: { labels: { color: textColor, font: { family: 'Plus Jakarta Sans', weight: 600 } } },
         tooltip: {
           backgroundColor: "rgba(15, 23, 42, 0.9)",
           titleColor: "#f1f5f9",
           bodyColor: "#f1f5f9",
           padding: 12,
           cornerRadius: 8,
-          titleFont: { family: 'Inter', weight: 'bold' }
+          titleFont: { family: 'Plus Jakarta Sans', weight: 'bold' }
         }
       },
       scales: {
-        x: { ticks: { color: textColor, font: { family: 'Inter' } }, grid: { display: false } },
-        y: { ticks: { color: textColor, font: { family: 'Inter' } }, grid: { color: gridColor }, border: { dash: [4, 4] } },
+        x: { ticks: { color: textColor, font: { family: 'Plus Jakarta Sans' } }, grid: { display: false } },
+        y: { ticks: { color: textColor, font: { family: 'Plus Jakarta Sans' } }, grid: { color: gridColor }, border: { dash: [4, 4] } },
       },
     },
   });

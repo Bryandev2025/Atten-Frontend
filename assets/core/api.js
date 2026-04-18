@@ -1,7 +1,29 @@
 const storageKey = "sars_session_v1";
+const DEFAULT_API_BASE = "https://attendance.test";
+
+function readRuntimeConfig() {
+  const cfg = window.__SARS_CONFIG__;
+  return cfg && typeof cfg === "object" ? cfg : {};
+}
+
+/** Resolved API origin (no trailing slash). Uses runtime config from `window.__SARS_CONFIG__`. */
+export function getApiBaseUrl() {
+  const v = readRuntimeConfig().apiBaseUrl;
+  if (typeof v === "string" && v.trim()) {
+    return v.trim().replace(/\/$/, "");
+  }
+  return DEFAULT_API_BASE;
+}
+
+function getApiKey() {
+  const key = readRuntimeConfig().apiKey;
+  return typeof key === "string" && key.trim() ? key.trim() : "";
+}
 
 export const config = {
-  baseUrl: "https://attendance.test",
+  get baseUrl() {
+    return getApiBaseUrl();
+  },
 };
 let pendingRequests = 0;
 
@@ -71,6 +93,10 @@ export async function api(path, options = {}) {
     "X-Requested-With": "XMLHttpRequest",
     ...(options.headers || {}),
   };
+  const apiKey = getApiKey();
+  if (apiKey) {
+    headers["X-API-Key"] = apiKey;
+  }
   if (isFormData) {
     // Let the browser set multipart boundary for Laravel file uploads.
     delete headers["Content-Type"];
@@ -93,7 +119,7 @@ export async function api(path, options = {}) {
     let response;
     try {
       response = await fetchWithTimeout(
-        `${config.baseUrl}${path}`,
+        `${getApiBaseUrl()}${path}`,
         {
           ...fetchOptions,
           headers,
@@ -103,10 +129,10 @@ export async function api(path, options = {}) {
     } catch (err) {
       if (err?.name === "AbortError") {
         throw new Error(
-          `Request timed out (${timeoutMs / 1000}s). Confirm the API is running at ${config.baseUrl}.`
+          `Request timed out (${timeoutMs / 1000}s). Confirm the API is running at ${getApiBaseUrl()}.`
         );
       }
-      throw new Error(`Cannot connect to API at ${config.baseUrl}. Start backend server and check API URL.`);
+      throw new Error(`Cannot connect to API at ${getApiBaseUrl()}. Start backend server and check API URL.`);
     }
 
     const contentType = response.headers.get("content-type") || "";
@@ -135,6 +161,10 @@ export async function api(path, options = {}) {
 export async function download(path, filename, options = {}) {
   const session = getSession();
   const headers = {};
+  const apiKey = getApiKey();
+  if (apiKey) {
+    headers["X-API-Key"] = apiKey;
+  }
   if (session?.token) headers.Authorization = `Bearer ${session.token}`;
   const timeoutMs = typeof options.timeoutMs === "number" ? options.timeoutMs : DOWNLOAD_TIMEOUT_MS;
 
@@ -143,12 +173,12 @@ export async function download(path, filename, options = {}) {
   try {
     let response;
     try {
-      response = await fetchWithTimeout(`${config.baseUrl}${path}`, { headers, signal: options.signal }, timeoutMs);
+      response = await fetchWithTimeout(`${getApiBaseUrl()}${path}`, { headers, signal: options.signal }, timeoutMs);
     } catch (err) {
       if (err?.name === "AbortError") {
         throw new Error(`Download timed out (${timeoutMs / 1000}s). Try again or check the API.`);
       }
-      throw new Error(`Cannot connect to API at ${config.baseUrl}.`);
+      throw new Error(`Cannot connect to API at ${getApiBaseUrl()}.`);
     }
     if (!response.ok) {
       if (response.status === 401) {
@@ -179,4 +209,40 @@ export async function download(path, filename, options = {}) {
     pendingRequests = Math.max(0, pendingRequests - 1);
     notifyLoadingChange();
   }
+}
+
+/**
+ * Load a binary resource (e.g. PNG) with the Sanctum Bearer token.
+ * Use for authenticated images that cannot use `<img src>` without exposing the token.
+ */
+export async function fetchAuthenticatedBlobUrl(path, options = {}) {
+  const session = getSession();
+  const timeoutMs = typeof options.timeoutMs === "number" ? options.timeoutMs : DEFAULT_TIMEOUT_MS;
+  const headers = {
+    Accept: options.accept || "*/*",
+    ...(getApiKey() ? { "X-API-Key": getApiKey() } : {}),
+    ...(session?.token ? { Authorization: `Bearer ${session.token}` } : {}),
+    ...(options.headers || {}),
+  };
+  let response;
+  try {
+    response = await fetchWithTimeout(
+      `${getApiBaseUrl()}${path}`,
+      { ...options, headers },
+      timeoutMs
+    );
+  } catch (err) {
+    if (err?.name === "AbortError") {
+      throw new Error(`Request timed out (${timeoutMs / 1000}s).`);
+    }
+    throw new Error(`Cannot connect to API at ${getApiBaseUrl()}.`);
+  }
+  if (!response.ok) {
+    if (response.status === 401) {
+      clearSession();
+      window.dispatchEvent(new CustomEvent("sars:unauthorized"));
+    }
+    throw new Error("Failed to load resource");
+  }
+  return response.blob();
 }

@@ -73,26 +73,36 @@ registerRoute("/setup-password", ({ query } = {}) => {
   const app = document.getElementById("app");
   const token = String(query?.token || "").trim();
   app.innerHTML = `
-    <section class="auth-wrap">
-      <div class="auth-card">
-        <form id="setup-password-form" class="auth-form">
-          <div class="auth-form-header">
-            <h2>Set Your Password</h2>
-            <p>Create your account password to activate student login.</p>
-          </div>
-          <div>
-            <label class="label" for="setup-password">Password</label>
-            <input id="setup-password" class="input" name="password" type="password" required minlength="6" placeholder="Minimum 6 characters" />
-          </div>
-          <div>
-            <label class="label" for="setup-password-confirmation">Confirm Password</label>
-            <input id="setup-password-confirmation" class="input" name="password_confirmation" type="password" required minlength="6" placeholder="Repeat password" />
-          </div>
-          <button class="btn btn-primary" type="submit" style="width:100%;">Set Password</button>
-          <button id="setup-password-back-btn" class="btn btn-outline" type="button" style="width:100%;">Back to Sign In</button>
-        </form>
+    <div class="auth-page auth-page--split">
+      <aside class="auth-hero" aria-hidden="true">
+        <div class="auth-hero-pattern"></div>
+        <div class="auth-hero-inner">
+          <p class="auth-hero-kicker">Student account</p>
+          <h1 class="auth-hero-title">Activate your login</h1>
+          <p class="auth-hero-text">Choose a password you’ll remember — you’ll use it every time you sign in.</p>
+        </div>
+      </aside>
+      <div class="auth-panel">
+        <div class="auth-card auth-card--elevated">
+          <form id="setup-password-form" class="auth-form">
+            <div class="auth-form-header">
+              <h2>Set your password</h2>
+              <p>Create a password to activate your student account.</p>
+            </div>
+            <div>
+              <label class="label" for="setup-password">Password</label>
+              <input id="setup-password" class="input" name="password" type="password" required minlength="6" placeholder="Minimum 6 characters" />
+            </div>
+            <div>
+              <label class="label" for="setup-password-confirmation">Confirm password</label>
+              <input id="setup-password-confirmation" class="input" name="password_confirmation" type="password" required minlength="6" placeholder="Repeat password" />
+            </div>
+            <button class="btn btn-primary btn-lg" type="submit" style="width:100%;">Set password</button>
+            <button id="setup-password-back-btn" class="btn btn-outline btn-lg" type="button" style="width:100%;">Back to sign in</button>
+          </form>
+        </div>
       </div>
-    </section>
+    </div>
   `;
 
   if (!token) {
@@ -138,13 +148,13 @@ registerRoute("/dashboard", async () => {
 
 registerRoute("/404", () => {
   document.getElementById("app").innerHTML = `
-    <section class="auth-wrap">
-      <article class="card empty-state" style="max-width:400px;">
+    <div class="auth-page auth-page--center">
+      <article class="card card--spotlight empty-state" style="max-width:420px;width:100%;">
         <h3>Page not found</h3>
-        <p class="muted">This route does not exist. Return to your dashboard from the login page.</p>
-        <p style="margin-top:16px;"><button type="button" class="btn btn-primary" id="404-home-btn">Go to sign in</button></p>
+        <p class="muted">This route does not exist. Use the button below to return.</p>
+        <p style="margin-top:20px;"><button type="button" class="btn btn-primary btn-lg" id="404-home-btn" style="width:100%;">Continue</button></p>
       </article>
-    </section>`;
+    </div>`;
   document.getElementById("404-home-btn")?.addEventListener("click", () => go(guard() ? "/dashboard" : "/login"));
 });
 

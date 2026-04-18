@@ -4,6 +4,7 @@ import { consumeUiFlash, rerenderView, setFormSubmitting, setInlineHint, setUiFl
 import { sectionCard } from "../../assets/components/ui.js";
 
 let teacherReportsRefreshId = null;
+let quickMarkState = { classId: null, schoolYearId: null, attendanceDate: null, roster: [], marks: new Map() };
 function listFrom(resp) {
   const payload = resp?.data ?? resp;
   if (Array.isArray(payload)) return payload;
@@ -15,7 +16,7 @@ function featureTabsHtml({ idPrefix, tabs }) {
   const nav = tabs
     .map(
       (tab, index) => `
-      <button type="button" class="feature-tab-btn ${index === 0 ? "active" : ""}" data-feature-tab="${idPrefix}:${tab.id}" aria-selected="${index === 0 ? "true" : "false"}" role="tab">${tab.label}</button>
+      <button type="button" class="side-tabs-btn ${index === 0 ? "active" : ""}" data-feature-tab="${idPrefix}:${tab.id}" aria-selected="${index === 0 ? "true" : "false"}" role="tab">${tab.label}</button>
     `,
     )
     .join("");
@@ -29,9 +30,9 @@ function featureTabsHtml({ idPrefix, tabs }) {
     )
     .join("");
   return `
-    <div class="feature-tabs" data-feature-tabs="${idPrefix}">
-      <nav class="feature-tab-nav" role="tablist">${nav}</nav>
-      <div class="feature-tab-content">${panels}</div>
+    <div class="side-tabs-layout" data-feature-tabs="${idPrefix}">
+      <nav class="side-tabs-nav" role="tablist">${nav}</nav>
+      <div class="side-tabs-panels feature-tab-content">${panels}</div>
     </div>
   `;
 }
@@ -154,9 +155,9 @@ export async function teacherOverviewHtml() {
   const workspaceContent = `
     <div class="grid two">
       ${sectionCard({
-        title: "Teacher Command Center",
-        subtitle: "Quick navigation and exports.",
-        helpText: "Use these shortcuts for your daily flow: announcements, reports, export, and jump-to forms.",
+        title: "Shortcuts",
+        subtitle: "Common tasks",
+        helpText: "",
         body: `
           <div class="actions">
             <button id="teacher-go-announcements-btn" class="btn btn-primary" type="button">Manage Announcements</button>
@@ -256,6 +257,35 @@ export async function teacherOverviewHtml() {
 
   const actionsContent = `
     <div class="grid two">
+      ${sectionCard({
+        title: "Quick mark (roster)",
+        subtitle: "Scan-friendly present/absent marking",
+        helpText: "",
+        body: `
+          <form id="teacher-quick-mark-form" class="grid">
+            <div class="row">
+              <select class="select" name="class_id" required ${classes.length ? "" : "disabled"}>
+                <option value="">Select class</option>
+                ${classes.map((c) => `<option value="${c.id}">${c.class_name || "Class"}${c.section ? ` — Sec ${c.section}` : ""}</option>`).join("")}
+              </select>
+              <input class="input" name="attendance_date" type="date" required />
+            </div>
+            <div class="row">
+              <input class="input" name="search" placeholder="Search student # or name" />
+              <div class="actions" style="justify-content:flex-end;">
+                <button id="teacher-quick-mark-load" class="btn btn-outline" type="submit">Load roster</button>
+              </div>
+            </div>
+          </form>
+          <div class="actions" style="margin-top:10px;">
+            <button id="teacher-mark-all-present" class="btn btn-outline btn-sm" type="button" disabled>Mark all present</button>
+            <button id="teacher-mark-all-absent" class="btn btn-outline btn-sm" type="button" disabled>Mark all absent</button>
+            <button id="teacher-quick-submit" class="btn btn-primary" type="button" disabled>Submit</button>
+          </div>
+          <p id="teacher-quick-mark-hint" class="muted" style="margin:8px 0 0;"></p>
+          <div id="teacher-quick-mark-table" class="table-wrap" style="margin-top:10px;max-height:420px;overflow:auto;"></div>
+        `,
+      })}
       ${sectionCard({
         title: "Open Attendance Session",
         helpText: "Create a live attendance window for a class. Share the session QR with students for check-in.",
@@ -637,6 +667,168 @@ export function bindTeacherActions({ toast }) {
       toast(err.message || "Unable to run session action.", "error");
     } finally {
       setFormSubmitting(e.currentTarget, false);
+    }
+  });
+
+  // Quick mark (roster)
+  const quickForm = document.getElementById("teacher-quick-mark-form");
+  const tableWrap = document.getElementById("teacher-quick-mark-table");
+  const hintEl = document.getElementById("teacher-quick-mark-hint");
+  const submitBtn = document.getElementById("teacher-quick-submit");
+  const allPresentBtn = document.getElementById("teacher-mark-all-present");
+  const allAbsentBtn = document.getElementById("teacher-mark-all-absent");
+
+  const todayIso = new Date().toISOString().slice(0, 10);
+  const dateInput = quickForm?.querySelector('input[name="attendance_date"]');
+  if (dateInput && !dateInput.value) dateInput.value = todayIso;
+
+  function setHint(msg) {
+    if (hintEl) hintEl.textContent = msg || "";
+  }
+
+  function currentFilterText() {
+    const v = quickForm?.querySelector('input[name="search"]')?.value || "";
+    return String(v).trim().toLowerCase();
+  }
+
+  function renderRosterTable() {
+    if (!tableWrap) return;
+    const q = currentFilterText();
+    const rows = (quickMarkState.roster || []).filter((r) => {
+      if (!q) return true;
+      const name = String(r.full_name || "").toLowerCase();
+      const num = String(r.student_number || "").toLowerCase();
+      return name.includes(q) || num.includes(q);
+    });
+
+    const body = rows
+      .map((r) => {
+        const status = quickMarkState.marks.get(Number(r.student_id)) || "present";
+        const isP = status === "present";
+        const isA = status === "absent";
+        return `
+          <tr data-student-row="${r.student_id}">
+            <td style="white-space:nowrap;"><strong>${r.student_number || `#${r.student_id}`}</strong></td>
+            <td>${r.full_name || "-"}</td>
+            <td style="text-align:right;white-space:nowrap;">
+              <button type="button" class="btn btn-sm ${isP ? "btn-primary" : "btn-outline"}" data-mark="${r.student_id}:present">Present</button>
+              <button type="button" class="btn btn-sm ${isA ? "btn-danger" : "btn-outline"}" data-mark="${r.student_id}:absent">Absent</button>
+            </td>
+          </tr>
+        `;
+      })
+      .join("");
+
+    tableWrap.innerHTML = `
+      <table>
+        <thead><tr><th>Student #</th><th>Name</th><th style="text-align:right;">Mark</th></tr></thead>
+        <tbody>${body || `<tr><td colspan="3" class="muted">No students match your search.</td></tr>`}</tbody>
+      </table>
+    `;
+
+    const total = quickMarkState.roster.length || 0;
+    const absent = Array.from(quickMarkState.marks.values()).filter((s) => s === "absent").length;
+    setHint(total ? `${total} students loaded · ${absent} absent` : "");
+  }
+
+  function enableQuickControls(on) {
+    if (submitBtn) submitBtn.disabled = !on;
+    if (allPresentBtn) allPresentBtn.disabled = !on;
+    if (allAbsentBtn) allAbsentBtn.disabled = !on;
+  }
+
+  quickForm?.querySelector('input[name="search"]')?.addEventListener("input", renderRosterTable);
+
+  quickForm?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    setHint("");
+    if (!quickForm) return;
+    const formData = Object.fromEntries(new FormData(quickForm).entries());
+    const classId = Number(formData.class_id);
+    const attendanceDate = String(formData.attendance_date || "").trim();
+    if (!classId || !attendanceDate) {
+      toast?.("Select class and date first.", "error");
+      return;
+    }
+    setFormSubmitting(quickForm, true, "Loading...");
+    enableQuickControls(false);
+    try {
+      const rosterRes = await api(`/api/teacher/classes/${classId}/roster`);
+      const roster = listFrom(rosterRes);
+      const schoolYearId = Number(rosterRes?.meta?.school_year_id || 0);
+      quickMarkState = {
+        classId,
+        schoolYearId,
+        attendanceDate,
+        roster,
+        marks: new Map(roster.map((r) => [Number(r.student_id), "present"])),
+      };
+      if (!schoolYearId) {
+        setHint("Roster loaded, but school year is missing. Contact admin.");
+      }
+      renderRosterTable();
+      enableQuickControls(true);
+      toast?.("Roster loaded.");
+    } catch (err) {
+      toast?.(err.message || "Unable to load roster.", "error");
+      setHint(err.message || "Unable to load roster.");
+    } finally {
+      setFormSubmitting(quickForm, false);
+    }
+  });
+
+  tableWrap?.addEventListener("click", (e) => {
+    const btn = e.target?.closest?.("[data-mark]");
+    if (!btn) return;
+    const raw = String(btn.getAttribute("data-mark") || "");
+    const [idStr, status] = raw.split(":");
+    const sid = Number(idStr);
+    if (!sid || !status) return;
+    quickMarkState.marks.set(sid, status);
+    renderRosterTable();
+  });
+
+  allPresentBtn?.addEventListener("click", () => {
+    quickMarkState.roster.forEach((r) => quickMarkState.marks.set(Number(r.student_id), "present"));
+    renderRosterTable();
+  });
+
+  allAbsentBtn?.addEventListener("click", () => {
+    quickMarkState.roster.forEach((r) => quickMarkState.marks.set(Number(r.student_id), "absent"));
+    renderRosterTable();
+  });
+
+  submitBtn?.addEventListener("click", async () => {
+    if (!quickMarkState.classId || !quickMarkState.schoolYearId || !quickMarkState.attendanceDate) {
+      toast?.("Load a roster first.", "error");
+      return;
+    }
+    const records = quickMarkState.roster.map((r) => ({
+      student_id: Number(r.student_id),
+      status: quickMarkState.marks.get(Number(r.student_id)) || "present",
+    }));
+    if (!records.length) {
+      toast?.("No students loaded.", "error");
+      return;
+    }
+    setFormSubmitting(quickForm, true, "Submitting...");
+    try {
+      await api("/api/teacher/attendance/mark", {
+        method: "POST",
+        body: JSON.stringify({
+          class_id: quickMarkState.classId,
+          school_year_id: quickMarkState.schoolYearId,
+          attendance_date: quickMarkState.attendanceDate,
+          records,
+        }),
+      });
+      toast?.("Attendance saved.");
+      setHint("Attendance saved.");
+    } catch (err) {
+      toast?.(err.message || "Unable to save attendance.", "error");
+      setHint(err.message || "Unable to save attendance.");
+    } finally {
+      setFormSubmitting(quickForm, false);
     }
   });
 }

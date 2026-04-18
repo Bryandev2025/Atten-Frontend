@@ -1,24 +1,34 @@
 export function renderAuthShell() {
   return `
-    <section class="auth-wrap">
-      <div class="auth-card">
-        <form id="login-form" class="auth-form">
-          <div class="auth-form-header">
-            <h2>MLGCL Portal Sign In</h2>
-            <p>Welcome to MLGCL. Use your school account to continue.</p>
-          </div>
-          <div>
-            <label class="label" for="login-email">Email</label>
-            <input id="login-email" class="input" name="email" type="email" required autocomplete="email" placeholder="you@school.edu" />
-          </div>
-          <div>
-            <label class="label" for="login-password">Password</label>
-            <input id="login-password" class="input" name="password" type="password" required autocomplete="current-password" placeholder="••••••••" />
-          </div>
-          <button class="btn btn-primary" type="submit" style="width:100%;">Continue</button>
-        </form>
+    <div class="auth-page auth-page--split">
+      <aside class="auth-hero" aria-hidden="true">
+        <div class="auth-hero-pattern"></div>
+        <div class="auth-hero-inner">
+          <p class="auth-hero-kicker">Attendance · Absences · Announcements</p>
+          <h1 class="auth-hero-title">MLGCL School Portal</h1>
+          <p class="auth-hero-text">One secure sign-in for administrators, teachers, and students.</p>
+        </div>
+      </aside>
+      <div class="auth-panel">
+        <div class="auth-card auth-card--elevated">
+          <form id="login-form" class="auth-form">
+            <div class="auth-form-header">
+              <h2>Sign in</h2>
+              <p>Use your school email and password.</p>
+            </div>
+            <div>
+              <label class="label" for="login-email">Email</label>
+              <input id="login-email" class="input" name="email" type="email" required autocomplete="email" placeholder="you@school.edu" />
+            </div>
+            <div>
+              <label class="label" for="login-password">Password</label>
+              <input id="login-password" class="input" name="password" type="password" required autocomplete="current-password" placeholder="••••••••" />
+            </div>
+            <button class="btn btn-primary btn-lg" type="submit" style="width:100%;">Continue</button>
+          </form>
+        </div>
       </div>
-    </section>
+    </div>
   `;
 }
 
@@ -85,22 +95,23 @@ export function dashboardShell({ title, subtitle, name, role, nav, quickStartTit
     </button>`,
     )
     .join("");
-  const quickStartHtml = quickStartItems.length
-    ? `
-      <article class="card" style="margin-top:12px;">
-        <h3 style="margin:0 0 8px;">${quickStartTitle || "Quick Start"}</h3>
-        <div class="actions" style="gap:8px;flex-wrap:wrap;">
-          ${quickStartItems.map((item) => `<span class="badge">${item}</span>`).join("")}
-        </div>
+  const quickStartHtml =
+    quickStartItems.length > 0
+      ? `
+      <article class="card card--quiet" style="margin-top:16px;">
+        ${quickStartTitle ? `<p class="quick-start-title">${quickStartTitle}</p>` : ""}
+        <ul class="quick-start-list">
+          ${quickStartItems.map((item) => `<li>${item}</li>`).join("")}
+        </ul>
       </article>
     `
-    : "";
+      : "";
 
   return `
     <div class="app-shell">
       <div class="app-main">
         <header class="app-header">
-          <div class="app-header-left">
+          <div class="app-header-top">
             <div class="app-brand">
               <img class="app-brand-logo" src="./assets/img/mlgcl-logo.svg" alt="MLGCL logo" />
               <div>
@@ -108,21 +119,25 @@ export function dashboardShell({ title, subtitle, name, role, nav, quickStartTit
                 <div class="app-brand-role">${roleLabel}</div>
               </div>
             </div>
+            <div class="app-header-actions">
+              <button id="help-btn" class="btn btn-ghost" type="button" aria-haspopup="dialog" aria-controls="help-modal">Help</button>
+              <button id="help-reset-btn" class="btn btn-ghost" type="button" title="Show onboarding tips again">Tips</button>
+              <button id="theme-toggle-btn" class="btn btn-icon" type="button" aria-label="Toggle theme" title="Theme">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 3a9 9 0 1 0 9 9c0-.46-.04-.92-.1-1.36a5.389 5.389 0 0 1-4.4 2.26 5.403 5.403 0 0 1-6.08-6.08 5.39 5.39 0 0 1 2.26-4.4c-.44-.06-.9-.1-1.36-.1z"/></svg>
+              </button>
+              <span class="user-chip">
+                <span class="avatar" aria-hidden="true">${initials}</span>
+                <span>${name}</span>
+              </span>
+              <button id="logout-btn" class="btn btn-danger btn-sm" type="button">Log out</button>
+            </div>
+          </div>
+          <div class="app-header-body">
             <div class="app-title-block">
               <p class="eyebrow">Dashboard</p>
               <h1>${title}</h1>
               <p class="tagline">${subtitle}</p>
             </div>
-          </div>
-          <div class="app-header-actions">
-            <button id="help-btn" class="btn btn-outline" type="button" aria-haspopup="dialog" aria-controls="help-modal">Need Help?</button>
-            <button id="help-reset-btn" class="btn btn-outline" type="button">Reset Help Tips</button>
-            <button id="theme-toggle-btn" class="btn btn-outline" type="button" aria-label="Toggle light or dark theme">Theme</button>
-            <span class="user-chip">
-              <span class="avatar" aria-hidden="true">${initials}</span>
-              <span>${name}</span>
-            </span>
-            <button id="logout-btn" class="btn btn-danger" type="button">Log out</button>
           </div>
         </header>
         <nav class="app-tabs" role="tablist" aria-label="Main sections">

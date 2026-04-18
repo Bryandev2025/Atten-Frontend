@@ -10,13 +10,14 @@ function listFrom(resp) {
   return [];
 }
 
-function featureTabsHtml({ idPrefix, tabs }) {
+/** Sidebar + content — fewer nested horizontal bars than the old tab strip. */
+function adminSettingsTabsHtml({ idPrefix, tabs }) {
   const nav = tabs
     .map(
       (tab, index) => `
       <button
         type="button"
-        class="feature-tab-btn ${index === 0 ? "active" : ""}"
+        class="settings-nav-btn ${index === 0 ? "active" : ""}"
         data-feature-tab="${idPrefix}:${tab.id}"
         aria-selected="${index === 0 ? "true" : "false"}"
         role="tab"
@@ -38,9 +39,9 @@ function featureTabsHtml({ idPrefix, tabs }) {
     )
     .join("");
   return `
-    <div class="feature-tabs" data-feature-tabs="${idPrefix}">
-      <nav class="feature-tab-nav" role="tablist">${nav}</nav>
-      <div class="feature-tab-content">${panels}</div>
+    <div class="admin-setup-layout" data-feature-tabs="${idPrefix}">
+      <nav class="settings-nav" role="tablist" aria-label="Setup sections">${nav}</nav>
+      <div class="settings-panels feature-tab-content">${panels}</div>
     </div>
   `;
 }
@@ -96,25 +97,25 @@ export async function adminOverviewHtml() {
     ])}
     <div class="grid two">
       ${sectionCard({
-        title: "Admin Command Center",
-        subtitle: "Fast actions for common platform operations.",
-        helpText: "Use these buttons for quick navigation and exports. Start with Reports for approvals, then go to Settings for setup tasks.",
+        title: "Shortcuts",
+        subtitle: "Common tasks",
+        helpText: "",
         tools: `
-          <button id="admin-refresh-overview-btn" class="btn btn-outline" type="button">Reload</button>
+          <button id="admin-refresh-overview-btn" class="btn btn-outline btn-sm" type="button">Refresh</button>
         `,
         body: `
           <div class="actions">
-            <button id="admin-go-reports-btn" class="btn btn-primary" type="button">Go to Reports</button>
-            <button id="admin-go-settings-btn" class="btn btn-outline" type="button">Go to Settings</button>
-            <button id="admin-export-users-quick-btn" class="btn btn-outline" type="button">Export Users</button>
-            <button id="admin-export-absence-quick-btn" class="btn btn-outline" type="button">Export Absence Reports</button>
+            <button id="admin-go-reports-btn" class="btn btn-primary" type="button">Reports</button>
+            <button id="admin-go-settings-btn" class="btn btn-outline" type="button">Setup</button>
+            <button id="admin-export-users-quick-btn" class="btn btn-outline" type="button">Export users</button>
+            <button id="admin-export-absence-quick-btn" class="btn btn-outline" type="button">Export absences</button>
           </div>
         `,
       })}
       ${sectionCard({
-        title: "Moderation Queue Snapshot",
-        subtitle: "Latest workload for admin review.",
-        helpText: "This table shows pending review counts. If any row shows Needs Review, open the matching area and resolve items.",
+        title: "Needs attention",
+        subtitle: "",
+        helpText: "",
         body: `
           <div class="table-wrap">
             <table>
@@ -431,15 +432,15 @@ export async function adminSettingsHtml() {
   `;
 
   const userManagementContent = `
-    ${flashSettings?.message ? `<article class="card"><p class="badge ok">${flashSettings.message}</p></article>` : ""}
+    ${flashSettings?.message ? `<article class="card card--flash"><p class="muted" style="margin:0;">${flashSettings.message}</p></article>` : ""}
     <article class="card">
-      <h3>Users by role</h3>
-      <p class="muted">Browse users by role first, then filter students by program.</p>
+      <h3 class="card-title-simple">Directory</h3>
+      <p class="card-lead">Switch role, then open a student programme if needed.</p>
       <div data-admin-user-tabs>
-        <div class="actions" style="margin-bottom:8px;gap:6px;flex-wrap:wrap;">
-          <button class="btn btn-outline btn-xs active" type="button" data-admin-user-tab="admin">Admin (${admins.length})</button>
-          <button class="btn btn-outline btn-xs" type="button" data-admin-user-tab="teacher">Teacher (${teachers.length})</button>
-          <button class="btn btn-outline btn-xs" type="button" data-admin-user-tab="student">Student (${students.length})</button>
+        <div class="segmented" style="margin-bottom:12px;">
+          <button class="segmented-btn active" type="button" data-admin-user-tab="admin">Admins · ${admins.length}</button>
+          <button class="segmented-btn" type="button" data-admin-user-tab="teacher">Teachers · ${teachers.length}</button>
+          <button class="segmented-btn" type="button" data-admin-user-tab="student">Students · ${students.length}</button>
         </div>
         <div data-admin-user-panel="admin">
           <div class="table-wrap">
@@ -463,11 +464,12 @@ export async function adminSettingsHtml() {
         </div>
         <div data-admin-user-panel="student" style="display:none;">
           <div data-admin-student-program-tabs>
-            <div class="actions" style="margin-bottom:8px;gap:6px;flex-wrap:wrap;">
-              <button class="btn btn-outline btn-xs active" type="button" data-admin-student-program-tab="bsit">BSIT (${studentPrograms.bsit.length})</button>
-              <button class="btn btn-outline btn-xs" type="button" data-admin-student-program-tab="educSocial">EDUC Social Studies (${studentPrograms.educSocial.length})</button>
-              <button class="btn btn-outline btn-xs" type="button" data-admin-student-program-tab="educMath">EDUC Math (${studentPrograms.educMath.length})</button>
-              ${studentPrograms.other.length ? `<button class="btn btn-outline btn-xs" type="button" data-admin-student-program-tab="other">Other (${studentPrograms.other.length})</button>` : ""}
+            <p class="muted" style="margin:0 0 8px;font-size:13px;">Programme</p>
+            <div class="segmented segmented--compact" style="margin-bottom:10px;flex-wrap:wrap;">
+              <button class="segmented-btn active" type="button" data-admin-student-program-tab="bsit">BSIT · ${studentPrograms.bsit.length}</button>
+              <button class="segmented-btn" type="button" data-admin-student-program-tab="educSocial">Social studies · ${studentPrograms.educSocial.length}</button>
+              <button class="segmented-btn" type="button" data-admin-student-program-tab="educMath">Math · ${studentPrograms.educMath.length}</button>
+              ${studentPrograms.other.length ? `<button class="segmented-btn" type="button" data-admin-student-program-tab="other">Other · ${studentPrograms.other.length}</button>` : ""}
             </div>
             <div data-admin-student-program-panel="bsit">
               <div class="table-wrap">
@@ -518,8 +520,8 @@ export async function adminSettingsHtml() {
       </div>
     </article>
     <article class="card">
-      <h3>Import Users</h3>
-      <p class="muted">Uses POST /api/admin/users-import (CSV/TXT only, Laravel multipart upload)</p>
+      <h3 class="card-title-simple">Import users</h3>
+      <p class="card-lead">CSV or plain text. One row per person (email, first name, last name).</p>
       <div class="upload-field">
         <input id="admin-users-import-file" class="upload-native-input" type="file" accept=".csv,.txt,text/csv,text/plain" />
         <label for="admin-users-import-file" class="btn btn-outline" role="button">Choose File</label>
@@ -792,19 +794,28 @@ export async function adminSettingsHtml() {
             </select>
           </div>
           <div class="row">
-            <select class="select" name="class_name" required ${classNameOptions.length ? "" : "disabled"}>
-              <option value="">Class name</option>
-              ${classNameOptions.map((v) => `<option value="${v}">${v}</option>`).join("")}
-            </select>
-            <select class="select" name="grade_level" required ${gradeLevelOptions.length ? "" : "disabled"}>
-              <option value="">Grade level label</option>
-              ${gradeLevelOptions.map((v) => `<option value="${v}">${v}</option>`).join("")}
-            </select>
+            <div>
+              <label class="label" for="admin-class-name">Class name</label>
+              <input id="admin-class-name" class="input" name="class_name" required list="admin-class-name-options" placeholder="e.g. BSIT" />
+              <datalist id="admin-class-name-options">
+                ${classNameOptions.map((v) => `<option value="${v}"></option>`).join("")}
+              </datalist>
+            </div>
+            <div>
+              <label class="label" for="admin-grade-level">Grade level label</label>
+              <input id="admin-grade-level" class="input" name="grade_level" required list="admin-grade-level-options" placeholder="e.g. 1st Year" value="1st Year" />
+              <datalist id="admin-grade-level-options">
+                ${gradeLevelOptions.map((v) => `<option value="${v}"></option>`).join("")}
+              </datalist>
+            </div>
           </div>
-          <select class="select" name="section" required ${sectionOptions.length ? "" : "disabled"}>
-            <option value="">Section</option>
-            ${sectionOptions.map((v) => `<option value="${v}">${v}</option>`).join("")}
-          </select>
+          <div>
+            <label class="label" for="admin-section">Section</label>
+            <input id="admin-section" class="input" name="section" required list="admin-section-options" placeholder="e.g. A" value="A" />
+            <datalist id="admin-section-options">
+              ${sectionOptions.map((v) => `<option value="${v}"></option>`).join("")}
+            </datalist>
+          </div>
           <textarea class="textarea" name="description" placeholder="Description (optional)"></textarea>
           <button class="btn btn-primary" type="submit">Create Class</button>
         </form>
@@ -884,12 +895,12 @@ export async function adminSettingsHtml() {
   `;
 
   return `
-    ${featureTabsHtml({
+    ${adminSettingsTabsHtml({
       idPrefix: "admin-settings",
       tabs: [
-        { id: "users", label: "User Management", content: userManagementContent },
-        { id: "school-years", label: "School Years", content: schoolYearsContent },
-        { id: "academic", label: "Academic Setup", content: academicContent },
+        { id: "users", label: "Users", content: userManagementContent },
+        { id: "school-years", label: "School years", content: schoolYearsContent },
+        { id: "academic", label: "Academics", content: academicContent },
         { id: "classes", label: "Classes", content: classesContent },
         { id: "moderation", label: "Moderation", content: moderationContent },
       ],
