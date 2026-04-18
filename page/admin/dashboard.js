@@ -397,6 +397,12 @@ export async function adminSettingsHtml() {
     if (s === "failed" || s === "expired") return "warn";
     return "";
   };
+  const latestInviteByUserId = new Map();
+  studentInvites.forEach((inv) => {
+    const uid = Number(inv?.user?.id || inv?.user_id || 0);
+    if (!uid || latestInviteByUserId.has(uid)) return;
+    latestInviteByUserId.set(uid, inv);
+  });
   const flash = consumeUiFlash("admin");
   const flashSettings = flash?.view === "settings" ? flash : null;
   const sortedSubjects = [...subjects].sort((a, b) => String(a?.name || "").localeCompare(String(b?.name || "")));
@@ -434,6 +440,24 @@ export async function adminSettingsHtml() {
   const userManagementContent = `
     ${flashSettings?.message ? `<article class="card card--flash"><p class="muted" style="margin:0;">${flashSettings.message}</p></article>` : ""}
     <article class="card">
+      <h3 class="card-title-simple">Portal scope (admin)</h3>
+      <p class="card-lead">Simple college-portal setup with full admin CRUD and role coverage.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Module</th><th>Admin Access</th></tr></thead>
+          <tbody>
+            <tr><td>Subjects</td><td><span class="badge ok">Create · Read · Update · Delete</span></td></tr>
+            <tr><td>Classes</td><td><span class="badge ok">Create · Read · Update · Delete</span></td></tr>
+            <tr><td>School Years</td><td><span class="badge ok">Create · Read · Update · Delete</span></td></tr>
+            <tr><td>Courses / Programs</td><td><span class="badge ok">Read · Assign (via class setup)</span></td></tr>
+            <tr><td>Users (Teacher/Student)</td><td><span class="badge ok">Create · Read · Update · Delete</span></td></tr>
+            <tr><td>Timetable slots</td><td><span class="badge ok">Create · Read · Update · Delete</span></td></tr>
+            <tr><td>Announcements</td><td><span class="badge ok">Read · Moderate · Delete</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </article>
+    <article class="card">
       <h3 class="card-title-simple">Directory</h3>
       <p class="card-lead">Switch role, then open a student programme if needed.</p>
       <div data-admin-user-tabs>
@@ -455,9 +479,20 @@ export async function adminSettingsHtml() {
         <div data-admin-user-panel="teacher" style="display:none;">
           <div class="table-wrap">
             <table>
-              <thead><tr><th>ID</th><th>Name</th><th>Email</th><th>Status</th></tr></thead>
+              <thead><tr><th>ID</th><th>Name</th><th>Email</th><th>Status</th><th>Invite</th><th></th></tr></thead>
               <tbody>
-                ${teachers.map((u) => `<tr><td>${u.id}</td><td>${u.full_name || "-"}</td><td>${u.email || "-"}</td><td>${u.status || "-"}</td></tr>`).join("") || '<tr><td colspan="4" class="muted">No teacher users.</td></tr>'}
+                ${teachers.map((u) => {
+                  const inv = latestInviteByUserId.get(Number(u.id));
+                  const status = inv?.status || "none";
+                  return `<tr>
+                    <td>${u.id}</td>
+                    <td>${u.full_name || "-"}</td>
+                    <td>${u.email || "-"}</td>
+                    <td>${u.status || "-"}</td>
+                    <td><span class="badge ${inviteStatusBadge(status)}">${status}</span></td>
+                    <td style="text-align:right;"><button class="btn btn-outline btn-xs" type="button" data-admin-resend-user-setup="${u.id}">Resend setup</button></td>
+                  </tr>`;
+                }).join("") || '<tr><td colspan="6" class="muted">No teacher users.</td></tr>'}
               </tbody>
             </table>
           </div>
@@ -474,9 +509,17 @@ export async function adminSettingsHtml() {
             <div data-admin-student-program-panel="bsit">
               <div class="table-wrap">
                 <table>
-                  <thead><tr><th>ID</th><th>Name</th><th>Email</th><th>Class</th></tr></thead>
+                  <thead><tr><th>ID</th><th>Name</th><th>Email</th><th>Class</th><th>Invite</th><th></th></tr></thead>
                   <tbody>
-                    ${studentPrograms.bsit.map((u) => `<tr><td>${u.id}</td><td>${u.full_name || "-"}</td><td>${u.email || "-"}</td><td>${u.student_profile?.school_class?.class_name || "-"}</td></tr>`).join("") || '<tr><td colspan="4" class="muted">No BSIT students.</td></tr>'}
+                    ${studentPrograms.bsit.map((u) => {
+                      const inv = latestInviteByUserId.get(Number(u.id));
+                      const status = inv?.status || "none";
+                      return `<tr>
+                        <td>${u.id}</td><td>${u.full_name || "-"}</td><td>${u.email || "-"}</td><td>${u.student_profile?.school_class?.class_name || "-"}</td>
+                        <td><span class="badge ${inviteStatusBadge(status)}">${status}</span></td>
+                        <td style="text-align:right;"><button class="btn btn-outline btn-xs" type="button" data-admin-resend-user-setup="${u.id}">Resend setup</button></td>
+                      </tr>`;
+                    }).join("") || '<tr><td colspan="6" class="muted">No BSIT students.</td></tr>'}
                   </tbody>
                 </table>
               </div>
@@ -484,9 +527,17 @@ export async function adminSettingsHtml() {
             <div data-admin-student-program-panel="educSocial" style="display:none;">
               <div class="table-wrap">
                 <table>
-                  <thead><tr><th>ID</th><th>Name</th><th>Email</th><th>Class</th></tr></thead>
+                  <thead><tr><th>ID</th><th>Name</th><th>Email</th><th>Class</th><th>Invite</th><th></th></tr></thead>
                   <tbody>
-                    ${studentPrograms.educSocial.map((u) => `<tr><td>${u.id}</td><td>${u.full_name || "-"}</td><td>${u.email || "-"}</td><td>${u.student_profile?.school_class?.class_name || "-"}</td></tr>`).join("") || '<tr><td colspan="4" class="muted">No EDUC Social Studies students.</td></tr>'}
+                    ${studentPrograms.educSocial.map((u) => {
+                      const inv = latestInviteByUserId.get(Number(u.id));
+                      const status = inv?.status || "none";
+                      return `<tr>
+                        <td>${u.id}</td><td>${u.full_name || "-"}</td><td>${u.email || "-"}</td><td>${u.student_profile?.school_class?.class_name || "-"}</td>
+                        <td><span class="badge ${inviteStatusBadge(status)}">${status}</span></td>
+                        <td style="text-align:right;"><button class="btn btn-outline btn-xs" type="button" data-admin-resend-user-setup="${u.id}">Resend setup</button></td>
+                      </tr>`;
+                    }).join("") || '<tr><td colspan="6" class="muted">No EDUC Social Studies students.</td></tr>'}
                   </tbody>
                 </table>
               </div>
@@ -494,9 +545,17 @@ export async function adminSettingsHtml() {
             <div data-admin-student-program-panel="educMath" style="display:none;">
               <div class="table-wrap">
                 <table>
-                  <thead><tr><th>ID</th><th>Name</th><th>Email</th><th>Class</th></tr></thead>
+                  <thead><tr><th>ID</th><th>Name</th><th>Email</th><th>Class</th><th>Invite</th><th></th></tr></thead>
                   <tbody>
-                    ${studentPrograms.educMath.map((u) => `<tr><td>${u.id}</td><td>${u.full_name || "-"}</td><td>${u.email || "-"}</td><td>${u.student_profile?.school_class?.class_name || "-"}</td></tr>`).join("") || '<tr><td colspan="4" class="muted">No EDUC Math students.</td></tr>'}
+                    ${studentPrograms.educMath.map((u) => {
+                      const inv = latestInviteByUserId.get(Number(u.id));
+                      const status = inv?.status || "none";
+                      return `<tr>
+                        <td>${u.id}</td><td>${u.full_name || "-"}</td><td>${u.email || "-"}</td><td>${u.student_profile?.school_class?.class_name || "-"}</td>
+                        <td><span class="badge ${inviteStatusBadge(status)}">${status}</span></td>
+                        <td style="text-align:right;"><button class="btn btn-outline btn-xs" type="button" data-admin-resend-user-setup="${u.id}">Resend setup</button></td>
+                      </tr>`;
+                    }).join("") || '<tr><td colspan="6" class="muted">No EDUC Math students.</td></tr>'}
                   </tbody>
                 </table>
               </div>
@@ -517,6 +576,37 @@ export async function adminSettingsHtml() {
             }
           </div>
         </div>
+      </div>
+    </article>
+    <article class="card">
+      <h3>Portal IDs and profile records</h3>
+      <p class="muted">Students use student number + QR token. Teachers use employee ID. Keep IDs unique for campus records.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Name</th><th>Role</th><th>Unique ID</th><th>Address</th><th>QR / Token Ref</th></tr></thead>
+          <tbody>
+            ${users.slice(0, 20).map((u) => {
+              const role = String(u.role?.name || u.role || "-").toLowerCase();
+              const isStudent = role === "student";
+              const uniqueId = isStudent
+                ? (u.student_profile?.student_number || "-")
+                : (u.teacher_profile?.employee_id || "-");
+              const address = isStudent
+                ? (u.student_profile?.address || "-")
+                : (u.teacher_profile?.address || "-");
+              const qrRef = isStudent
+                ? (u.student_profile?.qr_public_token ? `SARS_STUDENT:${String(u.student_profile.qr_public_token).slice(0, 14)}...` : "-")
+                : (u.teacher_profile?.employee_id ? `TEACHER:${u.teacher_profile.employee_id}` : "-");
+              return `<tr>
+                <td>${u.full_name || "-"}</td>
+                <td>${u.role?.name || u.role || "-"}</td>
+                <td>${uniqueId}</td>
+                <td>${address}</td>
+                <td class="muted">${qrRef}</td>
+              </tr>`;
+            }).join("") || '<tr><td colspan="5" class="muted">No user records found.</td></tr>'}
+          </tbody>
+        </table>
       </div>
     </article>
     <article class="card">
@@ -550,12 +640,13 @@ export async function adminSettingsHtml() {
       </form>
       <div class="table-wrap" style="margin-top:10px;">
         <table>
-          <thead><tr><th>Student</th><th>Email</th><th>Status</th><th>Expires</th><th></th></tr></thead>
+          <thead><tr><th>Account</th><th>Role</th><th>Email</th><th>Status</th><th>Expires</th><th></th></tr></thead>
           <tbody>
             ${
               studentInvites.slice(0, 15).map((inv) => `
                 <tr>
                   <td>${inv.user?.full_name || `${inv.user?.first_name || ""} ${inv.user?.last_name || ""}`.trim() || "-"}</td>
+                  <td>${String(inv.user?.role?.name || "-").toUpperCase()}</td>
                   <td>${inv.email || inv.user?.email || "-"}</td>
                   <td><span class="badge ${inviteStatusBadge(inv.status)}">${inv.status || "-"}</span></td>
                   <td>${inv.expires_at || "-"}</td>
@@ -567,7 +658,7 @@ export async function adminSettingsHtml() {
                     }
                   </td>
                 </tr>
-              `).join("") || '<tr><td colspan="5" class="muted">No student invites yet.</td></tr>'
+              `).join("") || '<tr><td colspan="6" class="muted">No password setup invites yet.</td></tr>'
             }
           </tbody>
         </table>
@@ -582,18 +673,89 @@ export async function adminSettingsHtml() {
             <input class="input" name="last_name" placeholder="Last Name" required />
           </div>
           <input class="input" name="email" type="email" placeholder="Email" required />
-          <div class="row">
-            <input class="input" name="password" type="password" placeholder="Password (min 6)" required />
+          <div id="admin-create-user-role-wrap" class="row">
             <select class="select" name="role_id" required>
               <option value="">Role</option>
-              ${roles.map((r) => `<option value="${r.id}">${r.name}</option>`).join("")}
+              ${roles.map((r) => `<option value="${r.id}" data-role-name="${String(r.name || "").toLowerCase()}">${r.name}</option>`).join("")}
             </select>
+          </div>
+          <div id="admin-create-user-password-wrap" class="row" style="display:none;">
+            <input class="input" name="password" type="password" placeholder="Password (required for Admin role only)" />
+          </div>
+          <p id="admin-create-user-password-hint" class="field-hint">Tip: for Student/Teacher, leave password blank — they will receive an email to create their own password.</p>
+          <div id="admin-create-user-teacher-fields" style="display:none;">
+            <p class="field-hint">Teacher profile: employee ID is auto-generated by default.</p>
+            <label class="muted"><input id="admin-teacher-custom-id-toggle" type="checkbox" /> Set custom employee ID</label>
+            <input id="admin-teacher-custom-id-input" class="input" name="teacher_employee_id" placeholder="Employee ID (optional custom value)" style="display:none;" />
+            <div class="row">
+              <input class="input" name="teacher_address" placeholder="Brgy, " value="Brgy, " />
+            </div>
+          </div>
+          <div id="admin-create-user-student-fields" style="display:none;">
+            <p class="field-hint">Student profile: choose class (required). Student number is auto-generated.</p>
+            <div class="row">
+              <select class="select" name="student_class_id">
+                <option value="">Class</option>
+                ${classes.map((c) => `<option value="${c.id}">#${c.id} — ${c.class_name || c.section || "Class"} (${c.school_year?.name || "SY"})</option>`).join("")}
+              </select>
+            </div>
+            <label class="muted"><input id="admin-student-custom-number-toggle" type="checkbox" /> Set custom student number</label>
+            <input id="admin-student-custom-number-input" class="input" name="student_number" placeholder="Student Number (optional custom value)" style="display:none;" />
+            <input class="input" name="student_address" placeholder="Brgy, " value="Brgy, " />
           </div>
           <select class="select" name="status">
             <option value="active">active</option>
             <option value="inactive">inactive</option>
           </select>
           <button class="btn btn-primary" type="submit">Create User</button>
+        </form>
+      </article>
+      <article class="card">
+        <h3>Update Teacher Profile</h3>
+        <form id="admin-update-teacher-profile-form" class="grid">
+          <select class="select" name="user_id" required ${teachers.length ? "" : "disabled"}>
+            <option value="">Select teacher</option>
+            ${teachers.map((t) => `<option value="${t.id}" data-first-name="${t.first_name || ""}" data-last-name="${t.last_name || ""}" data-status="${t.status || "active"}" data-employee-id="${t.teacher_profile?.employee_id || ""}" data-address="${t.teacher_profile?.address || ""}">#${t.id} — ${t.full_name || t.email || "Teacher"}</option>`).join("")}
+          </select>
+          <div class="row">
+            <input class="input" name="first_name" placeholder="First Name" required />
+            <input class="input" name="last_name" placeholder="Last Name" required />
+          </div>
+          <div class="row">
+            <input class="input" name="employee_id" placeholder="Employee ID" required />
+            <input class="input" name="address" placeholder="Brgy, " value="Brgy, " />
+          </div>
+          <select class="select" name="status">
+            <option value="active">active</option>
+            <option value="inactive">inactive</option>
+          </select>
+          <button class="btn btn-primary" type="submit">Update Teacher</button>
+        </form>
+      </article>
+      <article class="card">
+        <h3>Update Student Profile</h3>
+        <form id="admin-update-student-profile-form" class="grid">
+          <select class="select" name="user_id" required ${students.length ? "" : "disabled"}>
+            <option value="">Select student</option>
+            ${students.map((s) => `<option value="${s.id}" data-first-name="${s.first_name || ""}" data-last-name="${s.last_name || ""}" data-status="${s.status || "active"}" data-student-number="${s.student_profile?.student_number || ""}" data-class-id="${s.student_profile?.class_id || ""}" data-address="${s.student_profile?.address || ""}">#${s.id} — ${s.full_name || s.email || "Student"}</option>`).join("")}
+          </select>
+          <div class="row">
+            <input class="input" name="first_name" placeholder="First Name" required />
+            <input class="input" name="last_name" placeholder="Last Name" required />
+          </div>
+          <div class="row">
+            <input class="input" name="student_number" placeholder="Student Number" required />
+            <select class="select" name="class_id" required ${classes.length ? "" : "disabled"}>
+              <option value="">Class</option>
+              ${classes.map((c) => `<option value="${c.id}">#${c.id} — ${c.class_name || c.section || "Class"} (${c.school_year?.name || "SY"})</option>`).join("")}
+            </select>
+          </div>
+          <input class="input" name="address" placeholder="Brgy, " value="Brgy, " />
+          <select class="select" name="status">
+            <option value="active">active</option>
+            <option value="inactive">inactive</option>
+          </select>
+          <button class="btn btn-primary" type="submit">Update Student</button>
         </form>
       </article>
       <article class="card">
@@ -614,11 +776,15 @@ export async function adminSettingsHtml() {
       <article class="card">
         <h3>Create School Year</h3>
         <form id="admin-create-school-year-form" class="grid">
-          <input class="input" name="name" placeholder="e.g. 2026-2027" required />
-          <div class="row">
-            <input class="input" name="start_date" type="date" required />
-            <input class="input" name="end_date" type="date" required />
-          </div>
+          <select class="select" name="school_year_label" required>
+            <option value="">Select school year</option>
+            ${Array.from({ length: 8 }).map((_, i) => {
+              const start = new Date().getFullYear() - 1 + i;
+              const end = start + 1;
+              return `<option value="${start}-${end}">${start}-${end}</option>`;
+            }).join("")}
+          </select>
+          <p class="field-hint">Dates are generated automatically: start = June 1, end = May 31 of next year.</p>
           <label class="muted"><input id="admin-school-year-active" type="checkbox" /> set active</label>
           <button class="btn btn-primary" type="submit">Create School Year</button>
         </form>
@@ -1202,6 +1368,11 @@ export async function bindAdminReportChart({ toast } = {}) {
 }
 
 export function bindAdminSettingsActions({ toast } = {}) {
+  const ensureBrgyPrefix = (value) => {
+    const raw = String(value || "").trim();
+    if (!raw) return "Brgy, ";
+    return raw.toLowerCase().startsWith("brgy") ? raw : `Brgy, ${raw}`;
+  };
   document.querySelectorAll("[data-feature-tabs='admin-settings']").forEach((root) => {
     const buttons = Array.from(root.querySelectorAll("[data-feature-tab]"));
     const panels = Array.from(root.querySelectorAll("[data-feature-panel]"));
@@ -1305,6 +1476,61 @@ export function bindAdminSettingsActions({ toast } = {}) {
       toast?.(err.message || "Unable to import users.", "error");
     }
   });
+  const createUserForm = document.getElementById("admin-create-user-form");
+  const createRoleSelect = createUserForm?.querySelector('select[name="role_id"]');
+  const createTeacherFieldsWrap = document.getElementById("admin-create-user-teacher-fields");
+  const createTeacherEmployeeInput = createUserForm?.querySelector('input[name="teacher_employee_id"]');
+  const teacherCustomIdToggle = document.getElementById("admin-teacher-custom-id-toggle");
+  const createStudentFieldsWrap = document.getElementById("admin-create-user-student-fields");
+  const createPasswordWrap = document.getElementById("admin-create-user-password-wrap");
+  const createStudentNumberInput = createUserForm?.querySelector('input[name="student_number"]');
+  const createStudentClassInput = createUserForm?.querySelector('select[name="student_class_id"]');
+  const createPasswordInput = createUserForm?.querySelector('input[name="password"]');
+  const createPasswordHint = document.getElementById("admin-create-user-password-hint");
+  const studentCustomNumberToggle = document.getElementById("admin-student-custom-number-toggle");
+  const syncCreateUserRoleFields = () => {
+    const selected = createRoleSelect?.selectedOptions?.[0];
+    const roleName = String(selected?.getAttribute("data-role-name") || "").toLowerCase();
+    const isTeacher = roleName === "teacher";
+    const isStudent = roleName === "student";
+    const isAdmin = roleName === "admin";
+    if (createTeacherFieldsWrap) createTeacherFieldsWrap.style.display = isTeacher ? "" : "none";
+    if (createStudentFieldsWrap) createStudentFieldsWrap.style.display = isStudent ? "" : "none";
+    if (createPasswordWrap) createPasswordWrap.style.display = isAdmin ? "" : "none";
+    if (createTeacherEmployeeInput) {
+      const useCustomTeacherId = Boolean(teacherCustomIdToggle?.checked);
+      createTeacherEmployeeInput.required = isTeacher && useCustomTeacherId;
+      createTeacherEmployeeInput.style.display = isTeacher && useCustomTeacherId ? "" : "none";
+      if (!isTeacher || !useCustomTeacherId) createTeacherEmployeeInput.value = "";
+    }
+    if (createStudentNumberInput) {
+      const useCustom = Boolean(studentCustomNumberToggle?.checked);
+      createStudentNumberInput.required = isStudent && useCustom;
+      createStudentNumberInput.style.display = isStudent && useCustom ? "" : "none";
+      if (!isStudent || !useCustom) createStudentNumberInput.value = "";
+    }
+    if (createStudentClassInput) createStudentClassInput.required = isStudent;
+    if (createPasswordInput) {
+      createPasswordInput.required = isAdmin;
+      createPasswordInput.disabled = false;
+      createPasswordInput.placeholder = "Password (required for Admin role)";
+      if (!isAdmin) createPasswordInput.value = "";
+    }
+    if (createPasswordHint) {
+      createPasswordHint.textContent = isAdmin
+        ? "Admin accounts require a password now."
+        : "Student/Teacher accounts receive a welcome email with a Create Password link.";
+    }
+  };
+  createUserForm?.querySelectorAll('input[name="teacher_address"], input[name="student_address"]').forEach((input) => {
+    input.addEventListener("blur", () => {
+      input.value = ensureBrgyPrefix(input.value);
+    });
+  });
+  createRoleSelect?.addEventListener("change", syncCreateUserRoleFields);
+  teacherCustomIdToggle?.addEventListener("change", syncCreateUserRoleFields);
+  studentCustomNumberToggle?.addEventListener("change", syncCreateUserRoleFields);
+  syncCreateUserRoleFields();
   document.getElementById("admin-bulk-student-form")?.addEventListener("submit", async (e) => {
     e.preventDefault();
     const form = e.currentTarget;
@@ -1376,11 +1602,25 @@ export function bindAdminSettingsActions({ toast } = {}) {
       if (!inviteId) return;
       try {
         await api(`/api/admin/student-invites/${inviteId}/resend`, { method: "POST" });
-        toast?.("Student invite resent.");
-        setUiFlash("admin", { view: "settings", message: "Student invite resent." });
+        toast?.("Password setup invite resent.");
+        setUiFlash("admin", { view: "settings", message: "Password setup invite resent." });
         rerenderView("settings");
       } catch (err) {
         toast?.(err.message || "Unable to resend invite.", "error");
+      }
+    });
+  });
+  document.querySelectorAll("[data-admin-resend-user-setup]")?.forEach((btn) => {
+    btn.addEventListener("click", async (e) => {
+      const userId = Number(e.currentTarget?.getAttribute("data-admin-resend-user-setup"));
+      if (!userId) return;
+      try {
+        await api(`/api/admin/users/${userId}/resend-password-setup`, { method: "POST" });
+        toast?.("Password setup invite resent.");
+        setUiFlash("admin", { view: "settings", message: "Password setup invite resent." });
+        rerenderView("settings");
+      } catch (err) {
+        toast?.(err.message || "Unable to resend password setup invite.", "error");
       }
     });
   });
@@ -1388,24 +1628,164 @@ export function bindAdminSettingsActions({ toast } = {}) {
   document.getElementById("admin-create-user-form")?.addEventListener("submit", async (e) => {
     e.preventDefault();
     const data = Object.fromEntries(new FormData(e.currentTarget).entries());
+    const selectedRole = e.currentTarget?.querySelector('select[name="role_id"]')?.selectedOptions?.[0];
+    const roleName = String(selectedRole?.getAttribute("data-role-name") || "").toLowerCase();
+    const payload = {
+      role_id: Number(data.role_id),
+      first_name: data.first_name,
+      last_name: data.last_name,
+      email: data.email,
+      status: data.status,
+    };
+    if (String(data.password || "").trim()) {
+      payload.password = String(data.password).trim();
+    }
+    if (roleName === "teacher") {
+      payload.teacher_profile = {
+        employee_id: String(data.teacher_employee_id || "").trim(),
+        address: String(data.teacher_address || "").trim() || null,
+      };
+    } else if (roleName === "student") {
+      payload.student_profile = {
+        student_number: String(data.student_number || "").trim(),
+        class_id: Number(data.student_class_id),
+        address: String(data.student_address || "").trim() || null,
+      };
+    }
     setFormSubmitting(e.currentTarget, true, "Creating...");
     try {
-      await api("/api/admin/users", {
+      const created = await api("/api/admin/users", {
         method: "POST",
-        body: JSON.stringify({
-          role_id: Number(data.role_id),
-          first_name: data.first_name,
-          last_name: data.last_name,
-          email: data.email,
-          password: data.password,
-          status: data.status,
-        }),
+        body: JSON.stringify(payload),
       });
-      toast?.("User created successfully.");
+      const roleCreated = String(created?.data?.role?.name || roleName || "").toLowerCase();
+      const teacherId = created?.data?.teacher_profile?.employee_id;
+      const studentNumber = created?.data?.student_profile?.student_number;
+      const inviteSent = Boolean(created?.setup_invite_sent);
+      const inviteError = String(created?.setup_invite_error || "").trim();
+      const inviteSuffix = inviteSent
+        ? "Password setup email sent."
+        : `Password setup email failed to send.${inviteError ? ` (${inviteError})` : ""}`;
+      if (roleCreated === "teacher") {
+        toast?.(`Teacher account created. ID: ${teacherId || "generated"}. ${inviteSuffix}`);
+      } else if (roleCreated === "student") {
+        toast?.(`Student account created. Student No: ${studentNumber || "generated"}. ${inviteSuffix}`);
+      } else {
+        toast?.("User created successfully.");
+      }
       setUiFlash("admin", { view: "settings", message: "User created successfully." });
       rerenderView("settings");
     } catch (err) {
       toast?.(err.message || "Unable to create user.", "error");
+    } finally {
+      setFormSubmitting(e.currentTarget, false);
+    }
+  });
+
+  const updateTeacherForm = document.getElementById("admin-update-teacher-profile-form");
+  const updateTeacherSelect = updateTeacherForm?.querySelector('select[name="user_id"]');
+  const syncUpdateTeacherFields = () => {
+    const selected = updateTeacherSelect?.selectedOptions?.[0];
+    if (!selected) return;
+    const firstNameInput = updateTeacherForm?.querySelector('input[name="first_name"]');
+    const lastNameInput = updateTeacherForm?.querySelector('input[name="last_name"]');
+    const employeeIdInput = updateTeacherForm?.querySelector('input[name="employee_id"]');
+    const addressInput = updateTeacherForm?.querySelector('input[name="address"]');
+    const statusSelect = updateTeacherForm?.querySelector('select[name="status"]');
+    if (firstNameInput) firstNameInput.value = selected.getAttribute("data-first-name") || "";
+    if (lastNameInput) lastNameInput.value = selected.getAttribute("data-last-name") || "";
+    if (employeeIdInput) employeeIdInput.value = selected.getAttribute("data-employee-id") || "";
+    if (addressInput) addressInput.value = ensureBrgyPrefix(selected.getAttribute("data-address") || "");
+    if (statusSelect) statusSelect.value = selected.getAttribute("data-status") || "active";
+  };
+  updateTeacherSelect?.addEventListener("change", syncUpdateTeacherFields);
+  updateTeacherForm?.querySelector('input[name="address"]')?.addEventListener("blur", (e) => {
+    e.currentTarget.value = ensureBrgyPrefix(e.currentTarget.value);
+  });
+  syncUpdateTeacherFields();
+
+  updateTeacherForm?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const data = Object.fromEntries(new FormData(e.currentTarget).entries());
+    if (!Number(data.user_id)) {
+      toast?.("Select a teacher first.", "error");
+      return;
+    }
+    setFormSubmitting(e.currentTarget, true, "Updating...");
+    try {
+      await api(`/api/admin/users/${data.user_id}`, {
+        method: "PUT",
+        body: JSON.stringify({
+          first_name: String(data.first_name || "").trim(),
+          last_name: String(data.last_name || "").trim(),
+          status: data.status,
+          teacher_profile: {
+            employee_id: String(data.employee_id || "").trim(),
+            address: String(data.address || "").trim() || null,
+          },
+        }),
+      });
+      toast?.("Teacher profile updated successfully.");
+      setUiFlash("admin", { view: "settings", message: "Teacher profile updated successfully." });
+      rerenderView("settings");
+    } catch (err) {
+      toast?.(err.message || "Unable to update teacher profile.", "error");
+    } finally {
+      setFormSubmitting(e.currentTarget, false);
+    }
+  });
+
+  const updateStudentForm = document.getElementById("admin-update-student-profile-form");
+  const updateStudentSelect = updateStudentForm?.querySelector('select[name="user_id"]');
+  const syncUpdateStudentFields = () => {
+    const selected = updateStudentSelect?.selectedOptions?.[0];
+    if (!selected) return;
+    const firstNameInput = updateStudentForm?.querySelector('input[name="first_name"]');
+    const lastNameInput = updateStudentForm?.querySelector('input[name="last_name"]');
+    const studentNumberInput = updateStudentForm?.querySelector('input[name="student_number"]');
+    const classSelect = updateStudentForm?.querySelector('select[name="class_id"]');
+    const addressInput = updateStudentForm?.querySelector('input[name="address"]');
+    const statusSelect = updateStudentForm?.querySelector('select[name="status"]');
+    if (firstNameInput) firstNameInput.value = selected.getAttribute("data-first-name") || "";
+    if (lastNameInput) lastNameInput.value = selected.getAttribute("data-last-name") || "";
+    if (studentNumberInput) studentNumberInput.value = selected.getAttribute("data-student-number") || "";
+    if (classSelect) classSelect.value = selected.getAttribute("data-class-id") || "";
+    if (addressInput) addressInput.value = ensureBrgyPrefix(selected.getAttribute("data-address") || "");
+    if (statusSelect) statusSelect.value = selected.getAttribute("data-status") || "active";
+  };
+  updateStudentSelect?.addEventListener("change", syncUpdateStudentFields);
+  updateStudentForm?.querySelector('input[name="address"]')?.addEventListener("blur", (e) => {
+    e.currentTarget.value = ensureBrgyPrefix(e.currentTarget.value);
+  });
+  syncUpdateStudentFields();
+
+  updateStudentForm?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const data = Object.fromEntries(new FormData(e.currentTarget).entries());
+    if (!Number(data.user_id)) {
+      toast?.("Select a student first.", "error");
+      return;
+    }
+    setFormSubmitting(e.currentTarget, true, "Updating...");
+    try {
+      await api(`/api/admin/users/${data.user_id}`, {
+        method: "PUT",
+        body: JSON.stringify({
+          first_name: String(data.first_name || "").trim(),
+          last_name: String(data.last_name || "").trim(),
+          status: data.status,
+          student_profile: {
+            student_number: String(data.student_number || "").trim(),
+            class_id: Number(data.class_id),
+            address: String(data.address || "").trim() || null,
+          },
+        }),
+      });
+      toast?.("Student profile updated successfully.");
+      setUiFlash("admin", { view: "settings", message: "Student profile updated successfully." });
+      rerenderView("settings");
+    } catch (err) {
+      toast?.(err.message || "Unable to update student profile.", "error");
     } finally {
       setFormSubmitting(e.currentTarget, false);
     }
@@ -1431,14 +1811,22 @@ export function bindAdminSettingsActions({ toast } = {}) {
     e.preventDefault();
     const data = Object.fromEntries(new FormData(e.currentTarget).entries());
     const isActive = Boolean(document.getElementById("admin-school-year-active")?.checked);
+    const label = String(data.school_year_label || "").trim();
+    const [startYearRaw, endYearRaw] = label.split("-");
+    const startYear = Number(startYearRaw);
+    const endYear = Number(endYearRaw);
+    if (!label || !startYear || !endYear || endYear !== startYear + 1) {
+      toast?.("Select a valid school year from the dropdown.", "error");
+      return;
+    }
     setFormSubmitting(e.currentTarget, true, "Creating...");
     try {
       await api("/api/admin/school-years", {
         method: "POST",
         body: JSON.stringify({
-          name: data.name,
-          start_date: data.start_date,
-          end_date: data.end_date,
+          name: label,
+          start_date: `${startYear}-06-01`,
+          end_date: `${endYear}-05-31`,
           is_active: isActive,
         }),
       });
@@ -1470,8 +1858,9 @@ export function bindAdminSettingsActions({ toast } = {}) {
 
   document.getElementById("admin-assign-subject-teacher-form")?.addEventListener("submit", async (e) => {
     e.preventDefault();
-    const data = Object.fromEntries(new FormData(e.currentTarget).entries());
-    setFormSubmitting(e.currentTarget, true, "Saving...");
+    const form = e.currentTarget;
+    const data = Object.fromEntries(new FormData(form).entries());
+    setFormSubmitting(form, true, "Saving...");
     try {
       await api("/api/admin/class-subject-teachers", {
         method: "POST",
@@ -1482,11 +1871,11 @@ export function bindAdminSettingsActions({ toast } = {}) {
         }),
       });
       toast?.("Subject teacher assignment saved successfully.");
-      e.currentTarget.reset();
+      form?.reset();
     } catch (err) {
       toast?.(err.message || "Unable to save assignment.", "error");
     } finally {
-      setFormSubmitting(e.currentTarget, false);
+      setFormSubmitting(form, false);
     }
   });
 

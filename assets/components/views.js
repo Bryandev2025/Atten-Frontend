@@ -1,4 +1,4 @@
-import { getSession } from "../core/api.js";
+import { api, getSession } from "../core/api.js";
 import { displayNameOf, roleOf } from "../js/auth.js";
 import { dashboardShell } from "./ui.js";
 import { toast } from "./toast.js";
@@ -43,13 +43,19 @@ export async function renderRoleDashboard(onLogout) {
   const session = getSession();
   const user = session?.user || {};
   const role = roleOf(user);
-  const lastViewKey = `sars_last_view_${role || "user"}`;
+  const lastViewKey = `sars_last_view_${role || "student"}`;
   const app = document.getElementById("app");
+
+  const roleLabel = (r) => {
+    if (r === "admin") return "Administrator";
+    if (r === "teacher") return "Teacher";
+    return "Student";
+  };
 
   const roleMap = {
     admin: {
-      title: "Admin",
-      subtitle: "Overview, reports, and school setup",
+      title: "Administrator Portal",
+      subtitle: "Manage users, school years, classes, and review reports",
       nav: [
         { label: "Overview", view: "overview" },
         { label: "Reports", view: "reports" },
@@ -60,8 +66,8 @@ export async function renderRoleDashboard(onLogout) {
       views: adminViews,
     },
     teacher: {
-      title: "Teacher MLGCL Portal",
-      subtitle: "Handle attendance, class announcements, and student reports",
+      title: "Teacher Portal",
+      subtitle: "Attendance, class announcements, and absence reviews (your classes only)",
       nav: [
         { label: "Dashboard", view: "tools" },
         { label: "Class Announcements", view: "announcements" },
@@ -76,8 +82,8 @@ export async function renderRoleDashboard(onLogout) {
       views: teacherViews,
     },
     student: {
-      title: "Student MLGCL Portal",
-      subtitle: "Check schedule, attendance, announcements, and profile",
+      title: "Student Portal",
+      subtitle: "Check schedule, attendance, announcements, and your profile",
       nav: [
         { label: "Dashboard", view: "panel" },
         { label: "Class Schedule", view: "schedule" },
@@ -95,14 +101,71 @@ export async function renderRoleDashboard(onLogout) {
   };
 
   const cfg = roleMap[role] || roleMap.student;
+  let notifications = { count: 0, items: [] };
+  try {
+    if (role === "admin") {
+      const [reportsRes, announcementsRes] = await Promise.all([
+        api("/api/admin/absence-reports"),
+        api("/api/admin/announcements"),
+      ]);
+      const reports = Array.isArray(reportsRes?.data) ? reportsRes.data : (reportsRes?.data?.data || []);
+      const announcements = Array.isArray(announcementsRes?.data) ? announcementsRes.data : (announcementsRes?.data?.data || []);
+      const pending = reports.filter((r) => String(r.status || "").toLowerCase() === "pending").length;
+      const drafts = announcements.filter((a) => String(a.status || "").toLowerCase() !== "published").length;
+      notifications = {
+        count: pending + drafts,
+        items: [
+          { title: "Pending absence reports", body: `${pending} waiting for review` },
+          { title: "Draft announcements", body: `${drafts} not published yet` },
+        ],
+      };
+    } else if (role === "teacher") {
+      const [reportsRes, announcementsRes] = await Promise.all([
+        api("/api/teacher/absence-reports"),
+        api("/api/teacher/announcements"),
+      ]);
+      const reports = Array.isArray(reportsRes?.data) ? reportsRes.data : (reportsRes?.data?.data || []);
+      const announcements = Array.isArray(announcementsRes?.data) ? announcementsRes.data : (announcementsRes?.data?.data || []);
+      const pending = reports.filter((r) => String(r.status || "").toLowerCase() === "pending").length;
+      const drafts = announcements.filter((a) => String(a.status || "").toLowerCase() !== "published").length;
+      notifications = {
+        count: pending + drafts,
+        items: [
+          { title: "Pending absence reports", body: `${pending} need your action` },
+          { title: "Draft announcements", body: `${drafts} can be published` },
+        ],
+      };
+    } else {
+      const [annRes, reportRes] = await Promise.all([
+        api("/api/student/announcements"),
+        api("/api/student/absence-reports"),
+      ]);
+      const anns = Array.isArray(annRes?.data) ? annRes.data : (annRes?.data?.data || []);
+      const readIds = new Set(Array.isArray(annRes?.read_ids) ? annRes.read_ids : []);
+      const unread = anns.filter((a) => !readIds.has(a.id)).length;
+      const reports = Array.isArray(reportRes?.data) ? reportRes.data : (reportRes?.data?.data || []);
+      const pending = reports.filter((r) => String(r.status || "").toLowerCase() === "pending").length;
+      notifications = {
+        count: unread + pending,
+        items: [
+          { title: "Unread announcements", body: `${unread} still unread` },
+          { title: "Pending absence reports", body: `${pending} waiting for approval` },
+        ],
+      };
+    }
+  } catch {
+    notifications = { count: 0, items: [] };
+  }
   app.innerHTML = dashboardShell({
     title: cfg.title,
     subtitle: cfg.subtitle,
     name: displayNameOf(user),
     role,
+    roleLabelText: roleLabel(role),
     nav: cfg.nav,
     quickStartTitle: cfg.quickStartTitle,
     quickStartItems: cfg.quickStartItems,
+    notifications,
   });
 
   const viewRoot = document.getElementById("view-root");
@@ -201,8 +264,25 @@ export async function renderRoleDashboard(onLogout) {
   helpModal?.addEventListener("click", (e) => {
     if (e.target?.getAttribute?.("data-help-close") === "true") closeHelp();
   });
+  const notificationModal = document.getElementById("notification-popover");
+  const openNotifications = () => {
+    if (!notificationModal) return;
+    notificationModal.hidden = false;
+    document.body.style.overflow = "hidden";
+  };
+  const closeNotifications = () => {
+    if (!notificationModal) return;
+    notificationModal.hidden = true;
+    document.body.style.overflow = "";
+  };
+  document.getElementById("notification-bell-btn")?.addEventListener("click", openNotifications);
+  document.getElementById("notification-close-btn")?.addEventListener("click", closeNotifications);
+  notificationModal?.addEventListener("click", (e) => {
+    if (e.target?.getAttribute?.("data-notification-close") === "true") closeNotifications();
+  });
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape" && helpModal && !helpModal.hidden) closeHelp();
+    if (e.key === "Escape" && notificationModal && !notificationModal.hidden) closeNotifications();
   });
   document.addEventListener("click", (e) => {
     const btn = e.target?.closest?.(".section-help-btn");

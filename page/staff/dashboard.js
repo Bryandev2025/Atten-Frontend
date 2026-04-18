@@ -1,4 +1,4 @@
-import { api, download } from "../../assets/core/api.js";
+import { api, fetchAuthenticatedBlobUrl, getSession, download } from "../../assets/core/api.js";
 import { renderBarChart } from "../../assets/components/chart.js";
 import { consumeUiFlash, rerenderView, setFormSubmitting, setInlineHint, setUiFlash } from "../../assets/components/form-ui.js";
 import { sectionCard } from "../../assets/components/ui.js";
@@ -74,6 +74,7 @@ export async function teacherOverviewHtml() {
   let comments = [];
   let absenceReports = [];
   let teaching = { subject_assignments: [], timetable_slots: [] };
+  let qrCard = null;
   const warnings = [];
   const settled = await Promise.allSettled([
     api("/api/teacher/classes"),
@@ -81,8 +82,9 @@ export async function teacherOverviewHtml() {
     api("/api/teacher/announcement-comments"),
     api("/api/teacher/absence-reports"),
     api("/api/teacher/my-teaching"),
+    api("/api/teacher/qr-card"),
   ]);
-  const [cRes, aRes, coRes, rRes, tRes] = settled;
+  const [cRes, aRes, coRes, rRes, tRes, qRes] = settled;
   if (cRes.status === "fulfilled") classes = listFrom(cRes.value);
   else warnings.push(`classes: ${cRes.reason?.message || "failed"}`);
   if (aRes.status === "fulfilled") announcements = listFrom(aRes.value);
@@ -93,7 +95,13 @@ export async function teacherOverviewHtml() {
   else warnings.push(`absence reports: ${rRes.reason?.message || "failed"}`);
   if (tRes.status === "fulfilled") teaching = tRes.value?.data || teaching;
   else warnings.push(`teaching schedule: ${tRes.reason?.message || "failed"}`);
+  if (qRes.status === "fulfilled") qrCard = qRes.value?.data || null;
+  else warnings.push(`teacher portal card: ${qRes.reason?.message || "failed"}`);
   const warning = warnings.length ? warnings.join(" · ") : "";
+  const user = getSession()?.user || {};
+  const teacherName = user.full_name || user.name || qrCard?.full_name || "Teacher";
+  const employeeId = qrCard?.employee_id || user.teacherProfile?.employee_id || user.employee_id || `EMP${user.id || "-"}`;
+  const address = qrCard?.address || user.teacherProfile?.address || "-";
 
   const drafts = announcements.filter((item) => String(item.status || "").toLowerCase() !== "published").length;
   const pendingReports = absenceReports.filter((item) => String(item.status || "").toLowerCase() === "pending").length;
@@ -153,6 +161,47 @@ export async function teacherOverviewHtml() {
     .join("");
 
   const workspaceContent = `
+    <div class="grid two">
+      ${sectionCard({
+        title: "Teacher portal card",
+        subtitle: "Your unique campus identity and QR",
+        helpText: "Use your employee ID and QR for teacher-side attendance/identity checks.",
+        body: `
+          <div class="student-profile-meta"><span class="muted">Name</span><strong>${teacherName}</strong></div>
+          <div class="student-profile-meta"><span class="muted">Role</span><strong>Teacher</strong></div>
+          <div class="student-profile-meta"><span class="muted">Unique ID</span><strong>${employeeId}</strong></div>
+          <div class="student-profile-meta"><span class="muted">Address</span><strong>${address}</strong></div>
+          ${
+            qrCard?.qr_payload
+              ? `<div id="teacher-portal-qr-host" data-needs-qr="true" style="margin-top:10px;text-align:center;">
+                  <p class="muted" style="font-size:12px;">Loading teacher QR…</p>
+                </div>
+                <p class="muted" style="font-size:11px;margin-top:6px;">Teacher portal QR — keep private.</p>`
+              : '<p class="muted" style="font-size:12px;">QR not available yet. Ask admin to complete your teacher profile.</p>'
+          }
+        `,
+      })}
+    </div>
+    ${sectionCard({
+      title: "Teacher role scope",
+      subtitle: "Simple CRUD scope (6 modules).",
+      helpText: "Teacher workload is intentionally limited to class operations while admin controls master data.",
+      body: `
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Teacher Module</th><th>Access</th></tr></thead>
+            <tbody>
+              <tr><td>Attendance sessions</td><td><span class="badge ok">Create · Read · Update · Close</span></td></tr>
+              <tr><td>Attendance entries</td><td><span class="badge ok">Create · Read · Update</span></td></tr>
+              <tr><td>Class announcements</td><td><span class="badge ok">Create · Read · Update · Delete · Publish</span></td></tr>
+              <tr><td>Student remarks / report reviews</td><td><span class="badge ok">Create · Read · Update</span></td></tr>
+              <tr><td>Comment moderation</td><td><span class="badge ok">Read · Update (hide/unhide) · Delete</span></td></tr>
+              <tr><td>Class reports/export</td><td><span class="badge ok">Read · Export</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+      `,
+    })}
     <div class="grid two">
       ${sectionCard({
         title: "Shortcuts",
@@ -372,6 +421,28 @@ export async function teacherOverviewHtml() {
 }
 
 export function bindTeacherActions({ toast }) {
+  const qrHost = document.getElementById("teacher-portal-qr-host");
+  if (qrHost?.dataset.needsQr === "true") {
+    (async () => {
+      try {
+        const blob = await fetchAuthenticatedBlobUrl("/api/teacher/qr-image?size=180", { accept: "image/png" });
+        const url = URL.createObjectURL(blob);
+        qrHost.innerHTML = "";
+        const img = document.createElement("img");
+        img.src = url;
+        img.width = 180;
+        img.height = 180;
+        img.alt = "Teacher ID QR";
+        img.style.borderRadius = "8px";
+        img.style.border = "1px solid var(--border)";
+        img.addEventListener("load", () => URL.revokeObjectURL(url), { once: true });
+        qrHost.appendChild(img);
+      } catch {
+        qrHost.innerHTML =
+          '<p class="muted" style="font-size:12px;">Could not load teacher QR image. Confirm API access and teacher profile setup.</p>';
+      }
+    })();
+  }
   document.querySelectorAll("[data-feature-tabs='teacher-overview']").forEach((root) => {
     const buttons = Array.from(root.querySelectorAll("[data-feature-tab]"));
     const panels = Array.from(root.querySelectorAll("[data-feature-panel]"));

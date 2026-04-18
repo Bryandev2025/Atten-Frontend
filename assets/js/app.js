@@ -1,7 +1,7 @@
 import { renderAuthShell } from "../components/ui.js";
 import { toast } from "../components/toast.js";
 import { renderRoleDashboard } from "../components/views.js";
-import { getSession } from "../core/api.js";
+import { api, clearSession, getSession } from "../core/api.js";
 import { go, registerRoute, startRouter } from "../core/router.js";
 import { login, logout } from "./auth.js";
 
@@ -72,6 +72,11 @@ registerRoute("/login", () => {
 registerRoute("/setup-password", ({ query } = {}) => {
   const app = document.getElementById("app");
   const token = String(query?.token || "").trim();
+
+  // If an admin is already logged in on this device, it will force-redirect to /dashboard.
+  // Password setup must be done as a logged-out flow.
+  if (token) clearSession();
+
   app.innerHTML = `
     <div class="auth-page auth-page--split">
       <aside class="auth-hero" aria-hidden="true">
@@ -127,6 +132,7 @@ registerRoute("/setup-password", ({ query } = {}) => {
         }),
       });
       toast("Password set successfully. You can now sign in.");
+      clearSession();
       go("/login");
     } catch (err) {
       toast(err.message || "Unable to set password.", "error");

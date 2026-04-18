@@ -136,6 +136,24 @@ export async function studentOverviewHtml() {
   const streakDays = calculateAttendanceStreak(attendanceRecords);
 
   const overviewContent = `
+    ${sectionCard({
+      title: "Student role scope",
+      subtitle: "Simple CRUD scope (4 modules).",
+      helpText: "Students get only essential actions to keep the portal clear and easy.",
+      body: `
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Student Module</th><th>Access</th></tr></thead>
+            <tbody>
+              <tr><td>Profile preferences</td><td><span class="badge ok">Read · Update</span></td></tr>
+              <tr><td>Absence reports</td><td><span class="badge ok">Create · Read</span></td></tr>
+              <tr><td>Announcement comments</td><td><span class="badge ok">Create · Read · Update · Delete</span></td></tr>
+              <tr><td>Notification/reading state</td><td><span class="badge ok">Create (mark read) · Read</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+      `,
+    })}
     <div class="grid two">
       ${sectionCard({
         title: "Student Command Center",

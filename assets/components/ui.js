@@ -32,7 +32,17 @@ export function renderAuthShell() {
   `;
 }
 
-export function dashboardShell({ title, subtitle, name, role, nav, quickStartTitle = "", quickStartItems = [] }) {
+export function dashboardShell({
+  title,
+  subtitle,
+  name,
+  role,
+  roleLabelText = "",
+  nav,
+  quickStartTitle = "",
+  quickStartItems = [],
+  notifications = { count: 0, items: [] },
+}) {
   const initials = String(name)
     .split(" ")
     .filter(Boolean)
@@ -40,7 +50,9 @@ export function dashboardShell({ title, subtitle, name, role, nav, quickStartTit
     .map((n) => n[0])
     .join("")
     .toUpperCase() || "U";
-  const roleLabel = role ? String(role).charAt(0).toUpperCase() + String(role).slice(1) : "User";
+  const roleLabel =
+    roleLabelText ||
+    (role ? String(role).charAt(0).toUpperCase() + String(role).slice(1) : "User");
 
   const iconFor = (view) => {
     if (view.includes("overview") || view.includes("panel")) return "home";
@@ -106,6 +118,14 @@ export function dashboardShell({ title, subtitle, name, role, nav, quickStartTit
       </article>
     `
       : "";
+  const notificationCount = Math.max(0, Number(notifications?.count || 0));
+  const notificationItems = Array.isArray(notifications?.items) ? notifications.items : [];
+  const notificationListHtml = notificationItems.length
+    ? notificationItems
+      .slice(0, 8)
+      .map((item) => `<li><strong>${item.title || "Update"}:</strong> ${item.body || "-"}</li>`)
+      .join("")
+    : '<li class="muted">No new notifications.</li>';
 
   return `
     <div class="app-shell">
@@ -122,6 +142,10 @@ export function dashboardShell({ title, subtitle, name, role, nav, quickStartTit
             <div class="app-header-actions">
               <button id="help-btn" class="btn btn-ghost" type="button" aria-haspopup="dialog" aria-controls="help-modal">Help</button>
               <button id="help-reset-btn" class="btn btn-ghost" type="button" title="Show onboarding tips again">Tips</button>
+              <button id="notification-bell-btn" class="btn btn-icon" type="button" aria-haspopup="dialog" aria-controls="notification-popover" aria-label="Notifications" title="Notifications">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 22a2.5 2.5 0 0 0 2.45-2h-4.9A2.5 2.5 0 0 0 12 22Zm7-6V11a7 7 0 1 0-14 0v5l-2 2v1h18v-1l-2-2Z"/></svg>
+                ${notificationCount > 0 ? `<span class="notif-dot">${notificationCount > 9 ? "9+" : notificationCount}</span>` : ""}
+              </button>
               <button id="theme-toggle-btn" class="btn btn-icon" type="button" aria-label="Toggle theme" title="Theme">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 3a9 9 0 1 0 9 9c0-.46-.04-.92-.1-1.36a5.389 5.389 0 0 1-4.4 2.26 5.403 5.403 0 0 1-6.08-6.08 5.39 5.39 0 0 1 2.26-4.4c-.44-.06-.9-.1-1.36-.1z"/></svg>
               </button>
@@ -156,6 +180,18 @@ export function dashboardShell({ title, subtitle, name, role, nav, quickStartTit
               <input id="help-dont-show-checkbox" type="checkbox" />
               <span>Don’t show this guide automatically next time</span>
             </label>
+          </article>
+        </div>
+        <div id="notification-popover" class="help-modal" role="dialog" aria-modal="true" aria-labelledby="notification-title" hidden>
+          <div class="help-modal-backdrop" data-notification-close="true"></div>
+          <article class="help-modal-card">
+            <div class="panel-header" style="margin-bottom:10px;">
+              <h3 id="notification-title" class="panel-title">Notifications</h3>
+              <button id="notification-close-btn" class="btn btn-outline btn-xs" type="button">Close</button>
+            </div>
+            <ul style="margin:0 0 0 16px;padding:0;display:grid;gap:8px;">
+              ${notificationListHtml}
+            </ul>
           </article>
         </div>
         <div id="view-root" class="app-view" role="tabpanel" tabindex="0"></div>
